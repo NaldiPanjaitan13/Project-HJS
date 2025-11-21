@@ -1,9 +1,9 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 
-import Login from "./pages/Login";
+import Login from "./pages//auth/Login";
 import DashboardAdmin from "./pages/DashboardAdmin";
-import Register from "./pages/Register";
+import Register from "./pages/auth/Register";
 import DashboardUser from "./pages/DashboardUser";
 import LandingPage from "./pages/LandingPage";
 import EmailVerificationExpired from "./pages/EmailVerification";

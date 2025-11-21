@@ -19,7 +19,6 @@ const BarangKeluarAdmin = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   
-  // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
   const [editData, setEditData] = useState(null);
 
