@@ -24,6 +24,9 @@ class StockTransactionController extends Controller
         if ($request->has('start_date') && $request->has('end_date')) {
             $query->whereBetween('created_at', [$request->start_date, $request->end_date]);
         }
+        if ($request->has('penanggung_jawab') && $request->penanggung_jawab) {
+            $query->where('penanggung_jawab', 'like', '%' . $request->penanggung_jawab . '%');
+        }
 
         $transactions = $query->latest()->paginate($request->per_page ?? 15);
 
@@ -57,7 +60,8 @@ class StockTransactionController extends Controller
             'user_id' => 'nullable|exists:users,user_id',
             'jenis_transaksi' => 'required|in:IN,OUT,ADJUST',
             'jumlah' => 'required|integer|min:1',
-            'catatan' => 'nullable|string'
+            'catatan' => 'nullable|string',
+            'penanggung_jawab' => 'nullable|string|max:100',
         ]);
 
         if ($validator->fails()) {
@@ -84,6 +88,87 @@ class StockTransactionController extends Controller
             'message' => 'Transaction created successfully',
             'data' => $transaction->load(['product', 'user'])
         ], 201);
+    }
+
+    public function update(Request $request, $id)
+    {
+        $transaction = StockTransaction::find($id);
+
+        if (!$transaction) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Transaction not found'
+            ], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'jumlah' => 'sometimes|integer|min:1',
+            'catatan' => 'nullable|string',
+            'penanggung_jawab' => 'nullable|string|max:100',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $oldJumlah = $transaction->jumlah;
+        $newJumlah = $request->jumlah ?? $oldJumlah;
+
+        $transaction->update($request->only(['jumlah', 'catatan', 'penanggung_jawab']));
+
+        if ($oldJumlah != $newJumlah) {
+            $product = Product::find($transaction->product_id);
+            if ($product) {
+                $difference = $newJumlah - $oldJumlah;
+                
+                if ($transaction->jenis_transaksi === 'IN') {
+                    $product->stok += $difference;
+                } elseif ($transaction->jenis_transaksi === 'OUT') {
+                    $product->stok -= $difference;
+                }
+                
+                $product->save();
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Transaction updated successfully',
+            'data' => $transaction->load(['product', 'user'])
+        ]);
+    }
+
+    public function destroy($id)
+    {
+        $transaction = StockTransaction::find($id);
+
+        if (!$transaction) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Transaction not found'
+            ], 404);
+        }
+
+        // Kembalikan stok sebelum delete
+        $product = Product::find($transaction->product_id);
+        if ($product) {
+            if ($transaction->jenis_transaksi === 'IN') {
+                $product->stok -= $transaction->jumlah;
+            } elseif ($transaction->jenis_transaksi === 'OUT') {
+                $product->stok += $transaction->jumlah;
+            }
+            $product->save();
+        }
+
+        $transaction->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Transaction deleted successfully'
+        ]);
     }
 
     public function getByProduct($productId)

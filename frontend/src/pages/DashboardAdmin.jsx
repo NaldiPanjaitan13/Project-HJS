@@ -2,9 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Package, Home, Archive, ClipboardList, Layers, 
-  FileBarChart, FileText, LogOut, ChevronsLeft, ChevronsRight, User
+  FileBarChart, FileText, LogOut, ChevronsLeft, ChevronsRight, User, X 
 } from 'lucide-react';
-
 import DashboardPageAdmin from './admin/DashboardPageAdmin';
 import ProductManagementAdmin from './admin/ProductManagementAdmin';
 import BarangMasukAdmin from './admin/BarangMasukAdmin';
@@ -16,6 +15,7 @@ import KartuStokAdmin from './admin/KartuStokAdmin';
 const DashboardAdmin = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeMenu, setActiveMenu] = useState('dashboard');
+  const [showConfirmModal, setShowConfirmModal] = useState(false); 
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}');
 
@@ -29,7 +29,12 @@ const DashboardAdmin = () => {
     { id: 'kartu-stok', label: 'Kartu Stok', icon: FileText },
   ];
 
-  const handleLogout = () => {
+  const handleLogoutClick = () => {
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmLogout = () => {
+    setShowConfirmModal(false); 
     localStorage.removeItem('accessToken');
     localStorage.removeItem('user');
     localStorage.removeItem('emailVerified');
@@ -39,7 +44,10 @@ const DashboardAdmin = () => {
     navigate('/login');
   };
 
-  // Render active page component
+  const handleCancelLogout = () => {
+    setShowConfirmModal(false);
+  };
+
   const renderActivePage = () => {
     switch (activeMenu) {
       case 'dashboard':
@@ -63,7 +71,9 @@ const DashboardAdmin = () => {
 
   return (
     <div className="flex h-screen bg-gray-100">
+      
       {/* Sidebar */}
+      {/* ... (kode sidebar) ... */}
       <aside className={`${
         sidebarOpen ? 'w-64' : 'w-20'
       } bg-gradient-to-b from-indigo-700 to-indigo-900 text-white transition-all duration-300 flex flex-col shadow-2xl`}>
@@ -149,9 +159,9 @@ const DashboardAdmin = () => {
                 </div>
               </div>
               
-              {/* Logout Button */}
+              {/* Logout Button (Memanggil handleLogoutClick) */}
               <button 
-                onClick={handleLogout}
+                onClick={handleLogoutClick} 
                 className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-md"
                 title="Keluar dari sistem"
               >
@@ -167,6 +177,50 @@ const DashboardAdmin = () => {
           {renderActivePage()}
         </div>
       </main>
+
+      {/* MODAL KONFIRMASI LOGOUT */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-gray-800 bg-opacity-70 flex items-center justify-center z-50 transition-opacity duration-300">
+          <div className="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full transform transition-all duration-300 scale-100">
+            
+            {/* Modal Header */}
+            <div className="flex justify-between items-center border-b pb-3 mb-4">
+              <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <LogOut className="w-6 h-6 text-red-600" />
+                Konfirmasi Keluar
+              </h3>
+              <button 
+                onClick={handleCancelLogout} 
+                className="text-gray-400 hover:text-gray-600"
+                title="Tutup"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <p className="text-sm text-gray-600 mb-6">
+              Apakah Anda yakin ingin mengakhiri sesi dan keluar dari sistem inventory?
+            </p>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={handleCancelLogout}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleConfirmLogout}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors shadow-md"
+              >
+                Yakin
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -148,6 +148,8 @@ Route::prefix('dev')->group(function () {
     Route::post('/stock-transactions', [StockTransactionController::class, 'store']);
     Route::get('/stock-transactions/product/{productId}', [StockTransactionController::class, 'getByProduct']);
     Route::get('/stock-transactions/summary/all', [StockTransactionController::class, 'summary']);
+    Route::put('/stock-transactions/{id}', [StockTransactionController::class, 'update']);
+    Route::delete('/stock-transactions/{id}', [StockTransactionController::class, 'destroy']);
 
     // Profit Reports
     Route::get('/profit-reports', [ProfitReportController::class, 'index']);

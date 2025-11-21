@@ -29,12 +29,7 @@ const BarangMasukAdmin = () => {
   const fetchTransactions = async () => {
     try {
       const response = await stockapi.getAll();
-      
-      // FIX: Backend mengirim response.data yang berisi object dengan key 'data'
-      // Format: { success: true, data: { data: [...], current_page: 1, ... } }
       const allTransactions = response.data?.data || [];
-      
-      // Filter hanya transaksi IN (barang masuk)
       const masukTransactions = allTransactions.filter(t => t.jenis_transaksi === 'IN');
       
       setTransactions(masukTransactions);
@@ -70,17 +65,15 @@ const BarangMasukAdmin = () => {
 
     try {
       const response = await productapi.getAll();
-      
-      // FIX: Handle berbagai kemungkinan struktur response
       console.log('API Response:', response);
       
       let products = [];
       if (response.data?.data) {
-        products = response.data.data; // Jika nested
+        products = response.data.data; 
       } else if (response.data) {
-        products = response.data; // Jika langsung
+        products = response.data; 
       } else if (Array.isArray(response)) {
-        products = response; // Jika sudah di-unwrap sepenuhnya
+        products = response;
       }
 
       const product = products.find(p => p.kode_barang === formData.kode_barang);
@@ -103,7 +96,6 @@ const BarangMasukAdmin = () => {
     setError('');
     setSuccess('');
 
-    // Validasi
     if (!formData.tanggal_masuk) {
       setError('Tanggal masuk harus diisi!');
       return;
@@ -122,12 +114,11 @@ const BarangMasukAdmin = () => {
     try {
       setLoading(true);
 
-      // FIX: Sesuaikan dengan format Laravel backend
       const dataToSubmit = {
         product_id: parseInt(selectedProduct.product_id),
-        jenis_transaksi: 'IN', // HARUS uppercase: IN, OUT, atau ADJUST
-        jumlah: parseInt(formData.jumlah_masuk), // bukan 'quantity'
-        catatan: `Barang masuk - ${selectedProduct.nama_barang}` // bukan 'notes'
+        jenis_transaksi: 'IN', 
+        jumlah: parseInt(formData.jumlah_masuk), 
+        catatan: `Barang masuk - ${selectedProduct.nama_barang}`
       };
 
       console.log('Selected Product:', selectedProduct);
@@ -149,11 +140,9 @@ const BarangMasukAdmin = () => {
       console.error('Error response:', err.response);
       console.error('Error response data:', err.response?.data);
       
-      // FIX: Error handling lebih detail untuk 422
       let errorMessage = 'Gagal menyimpan transaksi';
       
       if (err.response?.status === 422) {
-        // Tampilkan detail validasi error
         const validationErrors = err.response?.data?.errors || err.response?.data?.details || {};
         const errorMessages = Object.entries(validationErrors)
           .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)

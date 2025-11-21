@@ -18,6 +18,7 @@ class StockTransaction extends Model
         'jenis_transaksi',
         'jumlah',
         'catatan',
+        'penanggung_jawab',
     ];
 
     protected $casts = [
