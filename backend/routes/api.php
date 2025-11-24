@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\StockTransactionController;
+use App\Http\Controllers\StockOpnameController;
 use App\Http\Controllers\ProfitReportController;
 use App\Http\Controllers\ProductQrLogController;
 
@@ -150,7 +151,15 @@ Route::prefix('dev')->group(function () {
     Route::get('/stock-transactions/summary/all', [StockTransactionController::class, 'summary']);
     Route::put('/stock-transactions/{id}', [StockTransactionController::class, 'update']);
     Route::delete('/stock-transactions/{id}', [StockTransactionController::class, 'destroy']);
-
+    
+    // Stock Opname Routes
+    Route::get('/stock-opnames', [StockOpnameController::class, 'index']);
+    Route::get('/stock-opnames/{id}', [StockOpnameController::class, 'show']);
+    Route::post('/stock-opnames', [StockOpnameController::class, 'store']);
+    Route::post('/stock-opnames/{id}/adjust', [StockOpnameController::class, 'adjustStock']);
+    Route::delete('/stock-opnames/{id}', [StockOpnameController::class, 'destroy']);
+    Route::get('/stock-opnames/summary/all', [StockOpnameController::class, 'summary']);
+    
     // Profit Reports
     Route::get('/profit-reports', [ProfitReportController::class, 'index']);
     Route::get('/profit-reports/{id}', [ProfitReportController::class, 'show']);
@@ -190,6 +199,16 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/', [StockTransactionController::class, 'store']);
         Route::get('/product/{productId}', [StockTransactionController::class, 'getByProduct']);
         Route::get('/summary/all', [StockTransactionController::class, 'summary']);
+    });
+
+    // Stock Opname Routes
+    Route::prefix('stock-opnames')->group(function () {
+        Route::get('/', [StockOpnameController::class, 'index']);
+        Route::get('/{id}', [StockOpnameController::class, 'show']);
+        Route::post('/', [StockOpnameController::class, 'store']);
+        Route::post('/{id}/adjust', [StockOpnameController::class, 'adjustStock']);
+        Route::delete('/{id}', [StockOpnameController::class, 'destroy']);
+        Route::get('/summary/all', [StockOpnameController::class, 'summary']);
     });
 
     // Profit Reports Routes

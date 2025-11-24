@@ -72,8 +72,7 @@ const DashboardAdmin = () => {
   return (
     <div className="flex h-screen bg-gray-100">
       
-      {/* Sidebar */}
-      {/* ... (kode sidebar) ... */}
+      {/* Sidebar */} 
       <aside className={`${
         sidebarOpen ? 'w-64' : 'w-20'
       } bg-gradient-to-b from-indigo-700 to-indigo-900 text-white transition-all duration-300 flex flex-col shadow-2xl`}>
@@ -85,8 +84,8 @@ const DashboardAdmin = () => {
           </div>
           {sidebarOpen && (
             <div>
-              <h1 className="text-lg font-bold">Inventory System</h1>
-              <p className="text-xs text-indigo-200">E.A Project</p>
+              <h1 className="text-lg font-bold">Aplikasi Inventoris</h1>
+              <p className="text-xs text-indigo-200">HJS Project</p>
             </div>
           )}
         </div>
