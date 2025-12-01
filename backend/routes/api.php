@@ -143,6 +143,7 @@ Route::prefix('dev')->group(function () {
     Route::delete('/products/{id}', [ProductController::class, 'destroy']);
     Route::post('/products/scan-qr', [ProductController::class, 'scanQr']);
 
+
     // Stock Transactions
     Route::get('/stock-transactions', [StockTransactionController::class, 'index']);
     Route::get('/stock-transactions/{id}', [StockTransactionController::class, 'show']);
@@ -151,6 +152,7 @@ Route::prefix('dev')->group(function () {
     Route::get('/stock-transactions/summary/all', [StockTransactionController::class, 'summary']);
     Route::put('/stock-transactions/{id}', [StockTransactionController::class, 'update']);
     Route::delete('/stock-transactions/{id}', [StockTransactionController::class, 'destroy']);
+    Route::get('/stock-transactions/kartu-stok/{productId}', [StockTransactionController::class, 'getKartuStok']);
     
     // Stock Opname Routes
     Route::get('/stock-opnames', [StockOpnameController::class, 'index']);

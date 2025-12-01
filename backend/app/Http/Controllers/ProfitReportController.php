@@ -6,13 +6,23 @@ use App\Models\ProfitReport;
 use App\Models\StockTransaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class ProfitReportController extends Controller
 {
     public function index(Request $request)
     {
-        $query = ProfitReport::query();
+        $query = ProfitReport::select([
+            'report_id',
+            'period_type',
+            'period_start',
+            'period_end',
+            'total_modal',
+            'total_penjualan',
+            'total_profit',
+            'created_at'
+        ]);
 
         if ($request->has('period_type')) {
             $query->where('period_type', $request->period_type);
@@ -22,7 +32,7 @@ class ProfitReportController extends Controller
             $query->byPeriod($request->start_date, $request->end_date);
         }
 
-        $reports = $query->latest('period_start')->paginate($request->per_page ?? 15);
+        $reports = $query->latest('period_start')->paginate($request->per_page ?? 5);
 
         return response()->json([
             'success' => true,
@@ -62,22 +72,17 @@ class ProfitReportController extends Controller
             ], 422);
         }
 
-        $transactions = StockTransaction::with('product')
-            ->where('jenis_transaksi', 'OUT')
-            ->whereBetween('created_at', [$request->period_start, $request->period_end])
-            ->get();
+        $result = StockTransaction::join('products', 'stock_transactions.product_id', '=', 'products.product_id')
+            ->where('stock_transactions.jenis_transaksi', 'OUT')
+            ->whereBetween('stock_transactions.created_at', [$request->period_start, $request->period_end])
+            ->selectRaw('
+                SUM(products.harga_modal * stock_transactions.jumlah) as total_modal,
+                SUM(products.harga_jual * stock_transactions.jumlah) as total_penjualan
+            ')
+            ->first();
 
-        $totalModal = 0;
-        $totalPenjualan = 0;
-
-        foreach ($transactions as $transaction) {
-            $product = $transaction->product;
-            $jumlah = $transaction->jumlah;
-
-            $totalModal += $product->harga_modal * $jumlah;
-            $totalPenjualan += $product->harga_jual * $jumlah;
-        }
-
+        $totalModal = $result->total_modal ?? 0;
+        $totalPenjualan = $result->total_penjualan ?? 0;
         $totalProfit = $totalPenjualan - $totalModal;
 
         $report = ProfitReport::create([
@@ -139,16 +144,21 @@ class ProfitReportController extends Controller
             $query->byPeriod($request->start_date, $request->end_date);
         }
 
-        $summary = [
-            'total_modal' => $query->clone()->sum('total_modal'),
-            'total_penjualan' => $query->clone()->sum('total_penjualan'),
-            'total_profit' => $query->clone()->sum('total_profit'),
-            'total_reports' => $query->count()
-        ];
+        $summary = $query->selectRaw('
+            SUM(total_modal) as total_modal,
+            SUM(total_penjualan) as total_penjualan,
+            SUM(total_profit) as total_profit,
+            COUNT(*) as total_reports
+        ')->first();
 
         return response()->json([
             'success' => true,
-            'data' => $summary
+            'data' => [
+                'total_modal' => $summary->total_modal ?? 0,
+                'total_penjualan' => $summary->total_penjualan ?? 0,
+                'total_profit' => $summary->total_profit ?? 0,
+                'total_reports' => $summary->total_reports ?? 0
+            ]
         ]);
     }
 

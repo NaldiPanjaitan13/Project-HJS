@@ -5,12 +5,18 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class ProductController extends Controller
 {
     public function index(Request $request)
-    {
+    {   
+        DB::enableQueryLog(); 
+        $startTime = microtime(true);
+
         $query = Product::with('user');
 
         if ($request->has('status')) {
@@ -34,84 +40,100 @@ class ProductController extends Controller
             });
         }
 
-        $products = $query->latest()->paginate($request->per_page ?? 15);
-
+        $products = $query->latest()->paginate($request->per_page ?? 5);
+        $endTime = microtime(true);
+        $executionTime = ($endTime - $startTime) * 1000; 
+        
+        $queries = DB::getQueryLog();
+        
+        Log::info('ProductController@index Debug:', [
+            'execution_time_ms' => round($executionTime, 2),
+            'total_queries' => count($queries),
+            'queries' => $queries
+        ]);
         return response()->json([
             'success' => true,
-            'data' => $products
+            'data' => $products,
+            'debug' => [ 
+                'execution_time_ms' => round($executionTime, 2),
+                'total_queries' => count($queries),
+                'queries' => $queries
+            ]
         ]);
     }
 
     public function show($id)
     {
-        $product = Product::with(['user', 'qrLogs', 'stockTransactions'])->find($id);
+        $product = Product::with(['user', 'qrLogs', 'stockTransactions'])
+        ->find($id);
+    
+    if (!$product) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Product not found'
+        ], 404);
+    }
 
-        if (!$product) {
+    return response()->json([
+        'success' => true,
+        'data' => $product
+    ]);
+    }
+
+    public function store(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'kode_barang' => 'required|string|max:50|unique:products,kode_barang',
+            'nama_barang' => 'required|string|max:255',
+            'jenis_barang' => 'nullable|string|max:255',
+            'satuan' => 'required|string|max:50',
+            'stok_minimal' => 'nullable|integer|min:0',
+            'stok' => 'nullable|integer|min:0',
+            'harga_modal' => 'required|numeric|min:0',
+            'harga_jual' => 'required|numeric|min:0',
+            'user_id' => 'nullable|exists:users,user_id',
+        ]);
+
+        if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Product not found'
-            ], 404);
+                'errors' => $validator->errors()
+            ], 422);
         }
-
-        return response()->json([
-            'success' => true,
-            'data' => $product
-        ]);
-    }
-
-public function store(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'kode_barang' => 'required|string|max:50|unique:products,kode_barang',
-        'nama_barang' => 'required|string|max:255',
-        'jenis_barang' => 'nullable|string|max:255',
-        'satuan' => 'required|string|max:50',
-        'stok_minimal' => 'nullable|integer|min:0',
-        'stok' => 'nullable|integer|min:0',
-        'harga_modal' => 'required|numeric|min:0',
-        'harga_jual' => 'required|numeric|min:0',
-        'user_id' => 'nullable|exists:users,user_id',
-    ]);
-
-    if ($validator->fails()) {
-        return response()->json([
-            'success' => false,
-            'errors' => $validator->errors()
-        ], 422);
-    }
-
-    try {
-        \DB::beginTransaction();
-
-        $product = Product::create($request->all());
 
         try {
-            $qrCode = QrCode::size(300)->generate($product->uuid);
-            $product->qr_code = $qrCode;
-            $product->save();
+            \DB::beginTransaction();
+
+            $product = Product::create($request->all());
+
+            try {
+                $qrCode = QrCode::size(300)->generate($product->uuid);
+                $product->qr_code = $qrCode;
+                $product->save();
+            } catch (\Exception $e) {
+                \Log::error('QR Code generation failed: ' . $e->getMessage());
+            }
+
+            \DB::commit();
+            Cache::forget("product_{$product->product_id}");
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Product created successfully',
+                'data' => $product->fresh()
+            ], 201);
+
         } catch (\Exception $e) {
-            \Log::error('QR Code generation failed: ' . $e->getMessage());
+            \DB::rollBack();
+            \Log::error('Product creation failed: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create product',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        \DB::commit();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Product created successfully',
-            'data' => $product->fresh()
-        ], 201);
-
-    } catch (\Exception $e) {
-        \DB::rollBack();
-        \Log::error('Product creation failed: ' . $e->getMessage());
-        
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to create product',
-            'error' => $e->getMessage()
-        ], 500);
     }
-}
 
     public function update(Request $request, $id)
     {
@@ -144,6 +166,7 @@ public function store(Request $request)
         }
 
         $product->update($request->all());
+        Cache::forget("product_{$id}");
 
         return response()->json([
             'success' => true,
@@ -164,6 +187,7 @@ public function store(Request $request)
         }
 
         $product->delete();
+        Cache::forget("product_{$id}");
 
         return response()->json([
             'success' => true,

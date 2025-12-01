@@ -26,6 +26,11 @@ export const stockopnameapi = {
     return response.data;
   },
 
+    getByProduct: async (productId) => {
+    const response = await api.get(`/dev/stock-opnames/product/${productId}`);
+    return response.data;
+  },
+
   getSummary: async (params = {}) => {
     const response = await api.get('/dev/stock-opnames/summary/all', { params });
     return response.data;

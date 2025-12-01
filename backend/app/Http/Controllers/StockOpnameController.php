@@ -8,18 +8,37 @@ use App\Models\StockTransaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class StockOpnameController extends Controller
 {
     public function index(Request $request)
     {
-        $query = StockOpname::with(['product', 'user']);
+        $query = StockOpname::select([
+            'opname_id',
+            'product_id',
+            'user_id',
+            'tanggal_opname',
+            'stok_sistem',
+            'stok_fisik',
+            'selisih',
+            'status_penyesuaian',
+            'nama_petugas',
+            'catatan',
+            'created_at'
+        ])->with([
+            'product:product_id,kode_barang,nama_barang,satuan',
+            'user:user_id,name'
+        ]);
+
         if ($request->has('status_penyesuaian')) {
             $query->where('status_penyesuaian', $request->status_penyesuaian);
         }
+
         if ($request->has('start_date') && $request->has('end_date')) {
             $query->whereBetween('tanggal_opname', [$request->start_date, $request->end_date]);
         }
+
         if ($request->has('search')) {
             $search = $request->search;
             $query->whereHas('product', function($q) use ($search) {
@@ -73,10 +92,11 @@ class StockOpnameController extends Controller
 
         try {
             DB::beginTransaction();
-            $product = Product::find($request->product_id);
+            $product = Product::lockForUpdate()->find($request->product_id);
             $stokSistem = $product->stok ?? 0;
             $stokFisik = $request->stok_fisik;
             $selisih = $stokFisik - $stokSistem;
+
             $opname = StockOpname::create([
                 'product_id' => $request->product_id,
                 'user_id' => $request->user_id ?? null,
@@ -88,17 +108,22 @@ class StockOpnameController extends Controller
                 'catatan' => $request->catatan,
                 'status_penyesuaian' => $request->sesuaikan_stok ? 'Disesuaikan' : 'Belum Disesuaikan'
             ]);
+
             if ($request->sesuaikan_stok && $selisih != 0) {
-                StockTransaction::create([
-                    'product_id' => $request->product_id,
-                    'user_id' => $request->user_id ?? null,
-                    'jenis_transaksi' => 'ADJUST',
-                    'jumlah' => $stokFisik, 
-                    'catatan' => "Stok Opname - Penyesuaian (Selisih: {$selisih}). {$request->catatan}"
+            $jenisTransaksi = $selisih > 0 ? 'IN' : 'OUT';
+            $jumlahAdjust = abs($selisih);
+    
+            StockTransaction::create([
+                'product_id' => $request->product_id,
+                'user_id' => $request->user_id ?? null,
+                'jenis_transaksi' => $jenisTransaksi,  
+                'jumlah' => $jumlahAdjust, 
+                'catatan' => "Stok Opname - {$request->catatan} (Selisih: {$selisih})"
                 ]);
             }
 
             DB::commit();
+            Cache::forget("product_{$request->product_id}");
 
             return response()->json([
                 'success' => true,
@@ -153,6 +178,7 @@ class StockOpnameController extends Controller
             $opname->save();
 
             DB::commit();
+            Cache::forget("product_{$opname->product_id}");
 
             return response()->json([
                 'success' => true,
@@ -206,17 +232,23 @@ class StockOpnameController extends Controller
             $query->whereBetween('tanggal_opname', [$request->start_date, $request->end_date]);
         }
 
-        $summary = [
-            'total_opname' => $query->count(),
-            'disesuaikan' => $query->clone()->where('status_penyesuaian', 'Disesuaikan')->count(),
-            'belum_disesuaikan' => $query->clone()->where('status_penyesuaian', 'Belum Disesuaikan')->count(),
-            'total_selisih_positif' => $query->clone()->where('selisih', '>', 0)->sum('selisih'),
-            'total_selisih_negatif' => $query->clone()->where('selisih', '<', 0)->sum('selisih'),
-        ];
+        $summary = $query->selectRaw('
+            COUNT(*) as total_opname,
+            SUM(CASE WHEN status_penyesuaian = "Disesuaikan" THEN 1 ELSE 0 END) as disesuaikan,
+            SUM(CASE WHEN status_penyesuaian = "Belum Disesuaikan" THEN 1 ELSE 0 END) as belum_disesuaikan,
+            SUM(CASE WHEN selisih > 0 THEN selisih ELSE 0 END) as total_selisih_positif,
+            SUM(CASE WHEN selisih < 0 THEN selisih ELSE 0 END) as total_selisih_negatif
+        ')->first();
 
         return response()->json([
             'success' => true,
-            'data' => $summary
+            'data' => [
+                'total_opname' => $summary->total_opname ?? 0,
+                'disesuaikan' => $summary->disesuaikan ?? 0,
+                'belum_disesuaikan' => $summary->belum_disesuaikan ?? 0,
+                'total_selisih_positif' => $summary->total_selisih_positif ?? 0,
+                'total_selisih_negatif' => $summary->total_selisih_negatif ?? 0,
+            ]
         ]);
     }
 }

@@ -6,11 +6,17 @@ use App\Models\StockTransaction;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class StockTransactionController extends Controller
 {
     public function index(Request $request)
     {
+        DB::enableQueryLog();
+        $startTime = microtime(true);
+
         $query = StockTransaction::with(['product', 'user']);
 
         if ($request->has('jenis_transaksi')) {
@@ -24,15 +30,32 @@ class StockTransactionController extends Controller
         if ($request->has('start_date') && $request->has('end_date')) {
             $query->whereBetween('created_at', [$request->start_date, $request->end_date]);
         }
+
         if ($request->has('penanggung_jawab') && $request->penanggung_jawab) {
             $query->where('penanggung_jawab', 'like', '%' . $request->penanggung_jawab . '%');
         }
 
-        $transactions = $query->latest()->paginate($request->per_page ?? 15);
+        $transactions = $query->latest()->paginate($request->per_page ?? 5);
+
+        $endTime = microtime(true);
+        $executionTime = ($endTime - $startTime) * 1000;
+        
+        $queries = DB::getQueryLog();
+        
+        Log::info('StockTransactionController@index Debug:', [
+            'execution_time_ms' => round($executionTime, 2),
+            'total_queries' => count($queries),
+            'queries' => $queries
+        ]);
 
         return response()->json([
             'success' => true,
-            'data' => $transactions
+            'data' => $transactions,
+            'debug' => [
+                'execution_time_ms' => round($executionTime, 2),
+                'total_queries' => count($queries),
+                'queries' => $queries
+            ]
         ]);
     }
 
@@ -83,6 +106,8 @@ class StockTransactionController extends Controller
 
         $transaction = StockTransaction::create($request->all());
 
+        Cache::forget("product_{$request->product_id}");
+
         return response()->json([
             'success' => true,
             'message' => 'Transaction created successfully',
@@ -131,6 +156,8 @@ class StockTransactionController extends Controller
                 }
                 
                 $product->save();
+
+                Cache::forget("product_{$transaction->product_id}");
             }
         }
 
@@ -152,7 +179,6 @@ class StockTransactionController extends Controller
             ], 404);
         }
 
-        // Kembalikan stok sebelum delete
         $product = Product::find($transaction->product_id);
         if ($product) {
             if ($transaction->jenis_transaksi === 'IN') {
@@ -161,6 +187,8 @@ class StockTransactionController extends Controller
                 $product->stok += $transaction->jumlah;
             }
             $product->save();
+
+            Cache::forget("product_{$transaction->product_id}");
         }
 
         $transaction->delete();
@@ -182,7 +210,7 @@ class StockTransactionController extends Controller
             ], 404);
         }
 
-        $transactions = StockTransaction::with('user')
+        $transactions = StockTransaction::with('user:user_id,name')
             ->where('product_id', $productId)
             ->latest()
             ->get();
@@ -196,8 +224,35 @@ class StockTransactionController extends Controller
         ]);
     }
 
+    public function getKartuStok($productId)
+{
+    $product = Product::find($productId);
+
+    if (!$product) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Product not found'
+        ], 404);
+    }
+    $transactions = StockTransaction::with('user:user_id,name')
+        ->where('product_id', $productId)
+        ->orderBy('created_at', 'asc')
+        ->get();
+
+    return response()->json([
+        'success' => true,
+        'data' => [
+            'product' => $product,
+            'transactions' => $transactions
+        ]
+    ]);
+}
+
     public function summary(Request $request)
     {
+        DB::enableQueryLog();
+        $startTime = microtime(true);
+
         $query = StockTransaction::query();
 
         if ($request->has('start_date') && $request->has('end_date')) {
@@ -211,9 +266,25 @@ class StockTransactionController extends Controller
             'total_transactions' => $query->count()
         ];
 
+        $endTime = microtime(true);
+        $executionTime = ($endTime - $startTime) * 1000;
+        
+        $queries = DB::getQueryLog();
+        
+        Log::info('StockTransactionController@summary Debug:', [
+            'execution_time_ms' => round($executionTime, 2),
+            'total_queries' => count($queries),
+            'queries' => $queries
+        ]);
+
         return response()->json([
             'success' => true,
-            'data' => $summary
+            'data' => $summary,
+            'debug' => [
+                'execution_time_ms' => round($executionTime, 2),
+                'total_queries' => count($queries),
+                'queries' => $queries
+            ]
         ]);
     }
 }
