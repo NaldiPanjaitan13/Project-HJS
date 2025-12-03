@@ -13,11 +13,9 @@ use App\Http\Controllers\StockOpnameController;
 use App\Http\Controllers\ProfitReportController;
 use App\Http\Controllers\ProductQrLogController;
 
-// Authentication
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 
-// Email Verification
 Route::get('/email/verify/{id}/{hash}', function (Request $request, $id, $hash) {
     Log::info('=== EMAIL VERIFICATION ATTEMPT ===', [
         'user_id' => $id,
