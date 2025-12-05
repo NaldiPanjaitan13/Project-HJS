@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cookie;
 
 class AuthController extends Controller
 {
@@ -155,26 +156,34 @@ class AuthController extends Controller
             }
 
             $token = $user->createToken('auth_token')->plainTextToken;
+            $cookie = cookie(
+            'access_token',      
+            $token,              
+            180,             
+            '/',                 
+            null,                
+            app()->environment('production'),                
+            true,                
+            false,               
+            'Lax'                
+        );
 
-            Log::info('✓ Login successful', [
-                'user_id' => $user->user_id,
-                'username' => $user->username
-            ]);
+            Log::info('✓ Login successful, cookie set for user: ' . $user->id);
 
             return response()->json([
-                'status' => 'success',
-                'message' => 'Login berhasil',
-                'token' => $token,
-                'user' => [
-                    'id' => $user->user_id, 
-                    'username' => $user->username,
-                    'email' => $user->email,
-                    'role' => $user->role,
-                    'email_verified_at' => $user->email_verified_at,
-                ]
-            ], 200);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
+            'status' => 'success',
+            'message' => 'Login berhasil',
+            'user' => [
+                'id' => $user->id, 
+                'username' => $user->username,
+                'email' => $user->email,
+                'role' => $user->role,
+                'email_verified_at' => $user->email_verified_at,
+            ]
+        ], 200)->withCookie($cookie);
+        }
+        
+        catch (\Illuminate\Validation\ValidationException $e) {
             Log::error('✗ Login validation failed:', $e->errors());
             return response()->json([
                 'status' => 'error',
@@ -274,28 +283,19 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         try {
-            $user = $request->user();
-            $userId = $user->user_id;
-            
-            $request->user()->currentAccessToken()->delete();
+            if ($request->user()) {
+                $request->user()->currentAccessToken()->delete();
+            }
 
-            Log::info('✓ Logout successful', [
-                'user_id' => $userId
-            ]);
+            $cookie = Cookie::forget('access_token');
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Logout berhasil.',
-            ], 200);
+            ], 200)->withCookie($cookie);
 
         } catch (\Exception $e) {
-            Log::error('✗ Logout error:', [
-                'message' => $e->getMessage()
-            ]);
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Logout gagal'
-            ], 500);
+            return response()->json(['status' => 'error', 'message' => 'Logout error'], 500);
         }
     }
 }
