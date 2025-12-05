@@ -1,34 +1,77 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Save, RotateCcw, Edit2, Trash2, Download, PackageMinus, QrCode, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, Save, RotateCcw, Edit2, Trash2, Download, PackageMinus, QrCode, X, ChevronDown } from 'lucide-react';
 import { productapi } from '../../services/productapi';
 import { stockapi } from '../../services/stockapi';
 
 const BarangKeluarAdmin = () => {
   const [formData, setFormData] = useState({
     tanggal_keluar: new Date().toISOString().split('T')[0],
-    kode_barang: '',
+    product_id: '',
     jumlah_keluar: '',
     penanggung_jawab: ''
   });
   
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [transactions, setTransactions] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [filteredProducts, setFilteredProducts] = useState([]);
+  const [searchProduct, setSearchProduct] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
   const [filteredTransactions, setFilteredTransactions] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const dropdownRef = useRef(null);
   
   const [showEditModal, setShowEditModal] = useState(false);
   const [editData, setEditData] = useState(null);
 
   useEffect(() => {
+    fetchProducts();
     fetchTransactions();
   }, []);
 
   useEffect(() => {
     filterTransactions();
   }, [searchTerm, transactions]);
+
+  useEffect(() => {
+    filterProductDropdown();
+  }, [searchProduct, products]);
+  
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false);
+        setSearchProduct('');
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      const response = await productapi.getForDropdown();
+      let productList = [];
+      
+      if (response.data?.data) {
+        productList = response.data.data;
+      } else if (response.data) {
+        productList = response.data;
+      } else if (Array.isArray(response)) {
+        productList = response;
+      }
+      
+      setProducts(productList);
+      setFilteredProducts(productList);
+    } catch (err) {
+      console.error('Error fetching products:', err);
+      setError('Gagal memuat daftar produk');
+    }
+  };
 
   const fetchTransactions = async () => {
     try {
@@ -40,6 +83,20 @@ const BarangKeluarAdmin = () => {
     } catch (err) {
       console.error('Error fetching transactions:', err);
     }
+  };
+
+  const filterProductDropdown = () => {
+    if (!searchProduct.trim()) {
+      setFilteredProducts(products);
+      return;
+    }
+
+    const filtered = products.filter(p =>
+      p.nama_barang?.toLowerCase().includes(searchProduct.toLowerCase()) ||
+      p.kode_barang?.toLowerCase().includes(searchProduct.toLowerCase()) ||
+      p.jenis_barang?.toLowerCase().includes(searchProduct.toLowerCase())
+    );
+    setFilteredProducts(filtered);
   };
 
   const filterTransactions = () => {
@@ -56,66 +113,30 @@ const BarangKeluarAdmin = () => {
     setFilteredTransactions(filtered);
   };
 
-  const handleCekBarang = async () => {
-    if (!formData.kode_barang.trim()) {
-      setError('Kode barang harus diisi!');
-      return;
-    }
-    setError('');
+  const handleClearSelection = () => {
     setSelectedProduct(null);
-    setLoading(true);
+    setFormData({ ...formData, product_id: '' });
+    setSearchProduct('');
+  };
 
-    try {
-      const response = await productapi.getAll();
-      let products = [];
-      if (response.data?.data) {
-        products = response.data.data;
-      } else if (response.data) {
-        products = response.data;
-      } else if (Array.isArray(response)) {
-        products = response;
-      }
-
-      const product = products.find(p => p.kode_barang === formData.kode_barang);
-      
-      if (product) {
-        setSelectedProduct(product);
-        setSuccess(`Produk ditemukan: ${product.nama_barang}`);
-      } else {
-        setError('Produk tidak ditemukan! Pastikan kode barang PERSIS sama (case-sensitive)');
-      }
-    } catch (err) {
-      console.error('Error checking product:', err);
-      setError(`Gagal memeriksa produk: ${err.response?.data?.message || err.message}`);
-    } finally {
-      setLoading(false);
-    }
+  const handleSelectProduct = (product) => {
+    setSelectedProduct(product);
+    setFormData({ ...formData, product_id: product.product_id });
+    setSearchProduct(product.nama_barang);
+    setShowDropdown(false);
+    setSuccess(`Produk dipilih: ${product.nama_barang}`);
+    setTimeout(() => setSuccess(''), 3000);
   };
 
   const handleSimpan = async () => {
     setError('');
     setSuccess('');
 
-    if (!formData.tanggal_keluar) {
-      setError('Tanggal keluar harus diisi!');
-      return;
-    }
-    if (!selectedProduct) {
-      setError('Silakan cek barang terlebih dahulu!');
-      return;
-    }
-    if (!formData.jumlah_keluar || formData.jumlah_keluar <= 0) {
-      setError('Jumlah keluar harus lebih dari 0!');
-      return;
-    }
-    if (parseInt(formData.jumlah_keluar) > selectedProduct.stok) {
-      setError(`Stok tidak mencukupi! Stok tersedia: ${selectedProduct.stok}`);
-      return;
-    }
-    if (!formData.penanggung_jawab.trim()) {
-      setError('Penanggung jawab harus diisi!');
-      return;
-    }
+    if (!formData.tanggal_keluar) return setError('Tanggal keluar harus diisi!');
+    if (!selectedProduct) return setError('Silakan pilih produk terlebih dahulu!');
+    if (!formData.jumlah_keluar || formData.jumlah_keluar <= 0) return setError('Jumlah keluar harus lebih dari 0!');
+    if (parseInt(formData.jumlah_keluar) > selectedProduct.stok) return setError(`Stok tidak mencukupi! Stok tersedia: ${selectedProduct.stok}`);
+    if (!formData.penanggung_jawab.trim()) return setError('Penanggung jawab harus diisi!');
 
     try {
       setLoading(true);
@@ -127,28 +148,17 @@ const BarangKeluarAdmin = () => {
         penanggung_jawab: formData.penanggung_jawab
       };
 
-      console.log('Data to submit:', dataToSubmit);
       await stockapi.create(dataToSubmit);
-      
       setSuccess('Transaksi barang keluar berhasil disimpan!');
       setTimeout(() => {
         handleReset();
         fetchTransactions();
+        fetchProducts();
       }, 1500);
 
     } catch (err) {
       console.error('Error saving transaction:', err);
-      let errorMessage = 'Gagal menyimpan transaksi';
-      if (err.response?.status === 422) {
-        const validationErrors = err.response?.data?.errors || {};
-        const errorMessages = Object.entries(validationErrors)
-          .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
-          .join(' | ');
-        errorMessage = err.response?.data?.message || `Validasi gagal: ${errorMessages}`;
-      } else if (err.response?.data?.message) {
-        errorMessage = err.response.data.message;
-      }
-      setError(errorMessage);
+      setError(err.response?.data?.message || 'Gagal menyimpan transaksi');
     } finally {
       setLoading(false);
     }
@@ -157,11 +167,12 @@ const BarangKeluarAdmin = () => {
   const handleReset = () => {
     setFormData({
       tanggal_keluar: new Date().toISOString().split('T')[0],
-      kode_barang: '',
+      product_id: '',
       jumlah_keluar: '',
       penanggung_jawab: ''
     });
     setSelectedProduct(null);
+    setSearchProduct('');
     setError('');
     setSuccess('');
   };
@@ -189,10 +200,10 @@ const BarangKeluarAdmin = () => {
       setShowEditModal(false);
       setEditData(null);
       fetchTransactions();
+      fetchProducts();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      console.error('Error updating transaction:', err);
-      setError(`Gagal update transaksi: ${err.response?.data?.message || err.message}`);
+      setError(err.response?.data?.message || 'Gagal update transaksi');
     } finally {
       setLoading(false);
     }
@@ -204,10 +215,10 @@ const BarangKeluarAdmin = () => {
         await stockapi.delete(id);
         setSuccess('Transaksi berhasil dihapus!');
         fetchTransactions();
+        fetchProducts();
         setTimeout(() => setSuccess(''), 3000);
       } catch (err) {
-        console.error('Error deleting transaction:', err);
-        setError(`Gagal menghapus transaksi: ${err.response?.data?.message || err.message}`);
+        setError(err.response?.data?.message || 'Gagal menghapus transaksi');
       }
     }
   };
@@ -253,15 +264,13 @@ const BarangKeluarAdmin = () => {
         </div>
 
         {/* Alert Messages */}
-        {success && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">{success}</div>
-        )}
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">{error}</div>
-        )}
+        {success && <div className="mb-4 p-4 bg-green-50 text-green-700 border border-green-200 rounded-lg">{success}</div>}
+        {error && <div className="mb-4 p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg">{error}</div>}
 
-        {/* Form Row 1 */}
+        {/* Form */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          
+          {/* 1. Tanggal Keluar */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               Tanggal Keluar <span className="text-red-500">*</span>
@@ -273,29 +282,91 @@ const BarangKeluarAdmin = () => {
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
             />
           </div>
-          <div>
+
+          {/* 2. Pilih Barang (Dropdown Search) */}
+          <div className="relative" ref={dropdownRef}>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Kode Barang <span className="text-red-500">*</span>
+              Pilih Barang <span className="text-red-500">*</span>
             </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={formData.kode_barang}
-                onChange={(e) => setFormData({ ...formData, kode_barang: e.target.value })}
-                onKeyPress={(e) => e.key === 'Enter' && handleCekBarang()}
-                placeholder="Input barcode"
-                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-              />
-              <button
-                onClick={handleCekBarang}
-                disabled={loading}
-                className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors font-medium whitespace-nowrap disabled:bg-gray-400"
-              >
-                <Search className="w-5 h-5" />
-                Cek Barang
-              </button>
+            
+            <div className="relative">
+              {!selectedProduct ? (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowDropdown(!showDropdown)}
+                    className="w-full px-4 py-2.5 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-left bg-white hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="text-gray-500">Pilih produk...</span>
+                  </button>
+                  <ChevronDown className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <div className="flex-1 px-4 py-2.5 border border-blue-300 bg-blue-50 rounded-lg">
+                    <p className="font-semibold text-blue-900">{selectedProduct.nama_barang}</p>
+                    <p className="text-xs text-blue-600">Kode: {selectedProduct.kode_barang}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearSelection}
+                    className="px-3 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                    title="Hapus pilihan"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Dropdown Content Absolute */}
+              {showDropdown && !selectedProduct && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg overflow-hidden">
+                  {/* Search Box */}
+                  <div className="p-3 border-b border-gray-200 bg-gray-50">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        value={searchProduct}
+                        onChange={(e) => setSearchProduct(e.target.value)}
+                        placeholder="Cari nama atau kode barang..."
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  {/* List Item */}
+                  <div className="max-h-64 overflow-y-auto">
+                    {filteredProducts.length === 0 ? (
+                      <div className="p-4 text-center text-gray-500">
+                        <PackageMinus className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                        <p className="text-sm">Tidak ada produk ditemukan</p>
+                      </div>
+                    ) : (
+                      filteredProducts.map((product) => (
+                        <div
+                          key={product.product_id}
+                          onClick={() => handleSelectProduct(product)}
+                          className="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors"
+                        >
+                          <p className="font-medium text-gray-900">{product.nama_barang}</p>
+                          <div className="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>Kode: {product.kode_barang}</span>
+                            <span className={product.stok > 0 ? "text-green-600 font-bold" : "text-red-600 font-bold"}>
+                              Stok: {product.stok}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
+
+          {/* 3. Jumlah Keluar */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               Jumlah Keluar <span className="text-red-500">*</span>
@@ -393,7 +464,7 @@ const BarangKeluarAdmin = () => {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Cari kode atau nama barang..."
+                placeholder="Cari..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-11 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"

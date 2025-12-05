@@ -39,6 +39,14 @@ class ProductController extends Controller
                   ->orWhere('jenis_barang', 'like', "%{$search}%");
             });
         }
+        
+        if ($request->has('for_dropdown') && $request->for_dropdown == true) {
+            $products = $query->orderBy('nama_barang', 'asc')->get();
+            return response()->json([
+                'success' => true,
+                'data' => $products
+            ]);
+        }
 
         $products = $query->latest()->paginate($request->per_page ?? 5);
         $endTime = microtime(true);
@@ -60,6 +68,45 @@ class ProductController extends Controller
                 'queries' => $queries
             ]
         ]);
+    }
+
+    public function getForDropdown(Request $request)
+{
+    try {
+        $query = Product::select('product_id', 'kode_barang', 'nama_barang', 'jenis_barang', 'satuan', 'stok', 'harga_modal', 'harga_jual');
+        
+        if ($request->has('only_available') && $request->only_available == true) {
+            $query->where('stok', '>', 0);
+        }
+
+        if ($request->has('search') && !empty($request->search)) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('nama_barang', 'like', "%{$search}%")
+                  ->orWhere('kode_barang', 'like', "%{$search}%");
+            });
+        }
+
+        $products = $query->orderBy('nama_barang', 'asc')->get();
+        \Log::info('ProductController@getForDropdown:', [
+            'total_products' => $products->count(),
+            'only_available' => $request->only_available,
+            'products' => $products->toArray()
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'data' => $products
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Error getting products for dropdown: ' . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to get products',
+            'error' => $e->getMessage()
+        ], 500);
+        }
     }
 
     public function show($id)
@@ -95,11 +142,17 @@ class ProductController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'errors' => $validator->errors()
-            ], 422);
-        }
+        \Log::error('Product validation failed:', [
+            'errors' => $validator->errors()->toArray(),
+            'request_data' => $request->all()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Validasi gagal',
+            'errors' => $validator->errors()
+        ], 422);
+    }
 
         try {
             \DB::beginTransaction();

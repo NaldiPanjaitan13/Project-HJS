@@ -135,12 +135,12 @@ Route::post('/email/resend', function (Request $request) {
 Route::prefix('dev')->group(function () {
     // Products
     Route::get('/products', [ProductController::class, 'index']);
+    Route::get('/products/dropdown/list', [ProductController::class, 'getForDropdown']);
     Route::get('/products/{id}', [ProductController::class, 'show']);
     Route::post('/products', [ProductController::class, 'store']);
     Route::put('/products/{id}', [ProductController::class, 'update']);
     Route::delete('/products/{id}', [ProductController::class, 'destroy']);
     Route::post('/products/scan-qr', [ProductController::class, 'scanQr']);
-
 
     // Stock Transactions
     Route::get('/stock-transactions', [StockTransactionController::class, 'index']);
@@ -185,6 +185,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Products Routes
     Route::prefix('products')->group(function () {
         Route::get('/', [ProductController::class, 'index']);
+        Route::get('/dropdown/list', [ProductController::class, 'getForDropdown']);
         Route::get('/{id}', [ProductController::class, 'show']);
         Route::post('/', [ProductController::class, 'store']);
         Route::put('/{id}', [ProductController::class, 'update']);

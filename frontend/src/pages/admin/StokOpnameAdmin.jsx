@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Save, RotateCcw, ClipboardCheck, AlertCircle, Download, CheckCircle, XCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, Save, RotateCcw, ClipboardCheck, AlertCircle, Download, CheckCircle, XCircle, ChevronDown, X, PackageMinus, QrCode } from 'lucide-react';
 import { productapi } from '../../services/productapi';
 import { stockopnameapi } from '../../services/stockopnameapi';
 
@@ -7,13 +7,20 @@ const StokOpnameAdmin = () => {
   const [formData, setFormData] = useState({
     tanggal_opname: new Date().toISOString().split('T')[0],
     kode_barang: '',
+    product_id: '',
     stok_fisik: '',
     nama_petugas: '',
     catatan: '',
     sesuaikan_stok: false
   });
   
+  const [products, setProducts] = useState([]);
+  const [filteredProducts, setFilteredProducts] = useState([]);
+  const [searchProduct, setSearchProduct] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const dropdownRef = useRef(null);
+
   const [opnames, setOpnames] = useState([]);
   const [filteredOpnames, setFilteredOpnames] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -23,12 +30,48 @@ const StokOpnameAdmin = () => {
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
+    fetchProducts();
     fetchOpnames();
   }, []);
 
   useEffect(() => {
     filterOpnames();
   }, [searchTerm, statusFilter, opnames]);
+
+  useEffect(() => {
+    filterProductDropdown();
+  }, [searchProduct, products]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false);
+        if (!selectedProduct) {
+            setSearchProduct('');
+        }
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [selectedProduct]);
+
+  const fetchProducts = async () => {
+    try {
+      const response = await productapi.getForDropdown();
+      let productList = [];
+      if (response.data?.data) {
+        productList = response.data.data;
+      } else if (response.data) {
+        productList = response.data;
+      } else if (Array.isArray(response)) {
+        productList = response;
+      }
+      setProducts(productList);
+      setFilteredProducts(productList);
+    } catch (err) {
+      console.error('Error fetching products:', err);
+    }
+  };
 
   const fetchOpnames = async () => {
     try {
@@ -41,10 +84,22 @@ const StokOpnameAdmin = () => {
     }
   };
 
+  const filterProductDropdown = () => {
+    if (!searchProduct.trim()) {
+      setFilteredProducts(products);
+      return;
+    }
+    const filtered = products.filter(p =>
+      p.nama_barang?.toLowerCase().includes(searchProduct.toLowerCase()) ||
+      p.kode_barang?.toLowerCase().includes(searchProduct.toLowerCase()) ||
+      p.jenis_barang?.toLowerCase().includes(searchProduct.toLowerCase())
+    );
+    setFilteredProducts(filtered);
+  };
+
   const filterOpnames = () => {
     let filtered = opnames;
 
-    // Filter by search term
     if (searchTerm.trim()) {
       filtered = filtered.filter(o => 
         o.product?.kode_barang?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -53,14 +108,10 @@ const StokOpnameAdmin = () => {
       );
     }
 
-    // Filter by status
     if (statusFilter !== 'all') {
       filtered = filtered.filter(o => {
-        if (statusFilter === 'disesuaikan') {
-          return o.status_penyesuaian === 'Disesuaikan';
-        } else if (statusFilter === 'belum') {
-          return o.status_penyesuaian === 'Belum Disesuaikan';
-        }
+        if (statusFilter === 'disesuaikan') return o.status_penyesuaian === 'Disesuaikan';
+        if (statusFilter === 'belum') return o.status_penyesuaian === 'Belum Disesuaikan';
         return true;
       });
     }
@@ -68,53 +119,27 @@ const StokOpnameAdmin = () => {
     setFilteredOpnames(filtered);
   };
 
-  const handleCekBarang = async () => {
-    if (!formData.kode_barang.trim()) {
-      setError('Kode barang harus diisi!');
-      return;
-    }
+  const handleSelectProduct = (product) => {
+    setSelectedProduct(product);
+    setFormData(prev => ({
+        ...prev,
+        product_id: product.product_id,
+        kode_barang: product.kode_barang
+    }));
+    setSearchProduct(product.nama_barang);
+    setShowDropdown(false);
+    setSuccess(`Produk dipilih: ${product.nama_barang}`);
+    setTimeout(() => setSuccess(''), 2000);
+  };
 
-    setError('');
+  const handleClearSelection = () => {
     setSelectedProduct(null);
-    setLoading(true);
-
-    try {
-      // Fetch fresh data dari database dengan search query
-      const response = await productapi.getAll({ search: formData.kode_barang });
-      let products = [];
-      if (response.data?.data) {
-        products = response.data.data;
-      } else if (response.data) {
-        products = response.data;
-      } else if (Array.isArray(response)) {
-        products = response;
-      }
-
-      // Filter exact match untuk kode_barang
-      const product = products.find(p => p.kode_barang === formData.kode_barang);
-      
-      if (product) {
-        // Fetch detail product by ID untuk mendapat data terbaru
-        const detailResponse = await productapi.getById(product.product_id);
-        const freshProduct = detailResponse.data || detailResponse;
-        
-        setSelectedProduct(freshProduct);
-        setSuccess(`Produk ditemukan: ${freshProduct.nama_barang} | Stok Real-time: ${freshProduct.stok || 0}`);
-        
-        console.log('Fresh product data:', freshProduct);
-      } else {
-        setError('Produk tidak ditemukan! Pastikan kode barang PERSIS sama');
-      }
-    } catch (err) {
-      console.error('Error checking product:', err);
-      setError(`Gagal memeriksa produk: ${err.response?.data?.message || err.message}`);
-    } finally {
-      setLoading(false);
-    }
+    setFormData(prev => ({ ...prev, product_id: '', kode_barang: '' }));
+    setSearchProduct('');
   };
 
   const calculateSelisih = () => {
-    if (!selectedProduct || !formData.stok_fisik) return 0;
+    if (!selectedProduct || formData.stok_fisik === '') return 0;
     return parseInt(formData.stok_fisik) - (selectedProduct.stok || 0);
   };
 
@@ -122,32 +147,14 @@ const StokOpnameAdmin = () => {
     setError('');
     setSuccess('');
 
-    // Validasi
-    if (!formData.tanggal_opname) {
-      setError('Tanggal opname harus diisi!');
-      return;
-    }
-    if (!selectedProduct) {
-      setError('Silakan cek barang terlebih dahulu!');
-      return;
-    }
-    if (formData.stok_fisik === '' || formData.stok_fisik < 0) {
-      setError('Stok fisik harus diisi dengan nilai valid!');
-      return;
-    }
+    if (!formData.tanggal_opname) return setError('Tanggal opname harus diisi!');
+    if (!selectedProduct) return setError('Silakan pilih produk terlebih dahulu!');
+    if (formData.stok_fisik === '' || formData.stok_fisik < 0) return setError('Stok fisik harus diisi dengan nilai valid!');
 
     try {
       setLoading(true);
-      
-      // PENTING: Refresh stok produk sebelum simpan untuk memastikan data terbaru
       const freshProductResponse = await productapi.getById(selectedProduct.product_id);
       const freshProduct = freshProductResponse.data || freshProductResponse;
-      const currentStokSistem = freshProduct.stok || 0;
-      
-      console.log('Current stok from DB:', currentStokSistem);
-      console.log('Selected product stok (mungkin lama):', selectedProduct.stok);
-      
-      // Update selected product dengan data terbaru
       setSelectedProduct(freshProduct);
       
       const dataToSubmit = {
@@ -159,19 +166,18 @@ const StokOpnameAdmin = () => {
         sesuaikan_stok: formData.sesuaikan_stok
       };
 
-      console.log('Data to submit:', dataToSubmit);
-      const response = await stockopnameapi.create(dataToSubmit);
+      await stockopnameapi.create(dataToSubmit);
       
       const message = formData.sesuaikan_stok 
         ? 'Stok opname berhasil disimpan dan disesuaikan dengan sistem!' 
         : 'Stok opname berhasil disimpan!';
       
       setSuccess(message);
-      console.log('Opname response:', response);
       
       setTimeout(() => {
         handleReset();
         fetchOpnames();
+        fetchProducts();
       }, 1500);
 
     } catch (err) {
@@ -182,7 +188,7 @@ const StokOpnameAdmin = () => {
         const errorMessages = Object.entries(validationErrors)
           .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
           .join(' | ');
-        errorMessage = err.response?.data?.message || `Validasi gagal: ${errorMessages}`;
+        errorMessage = `Validasi gagal: ${errorMessages}`;
       } else if (err.response?.data?.message) {
         errorMessage = err.response.data.message;
       }
@@ -193,17 +199,15 @@ const StokOpnameAdmin = () => {
   };
 
   const handleAdjustStock = async (opnameId) => {
-    if (!window.confirm('Apakah Anda yakin ingin menyesuaikan stok dengan hasil opname ini?')) {
-      return;
-    }
+    if (!window.confirm('Apakah Anda yakin ingin menyesuaikan stok dengan hasil opname ini?')) return;
 
     try {
       await stockopnameapi.adjustStock(opnameId);
       setSuccess('Stok berhasil disesuaikan!');
       fetchOpnames();
+      fetchProducts();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      console.error('Error adjusting stock:', err);
       setError(`Gagal menyesuaikan stok: ${err.response?.data?.message || err.message}`);
     }
   };
@@ -216,7 +220,6 @@ const StokOpnameAdmin = () => {
         fetchOpnames();
         setTimeout(() => setSuccess(''), 3000);
       } catch (err) {
-        console.error('Error deleting opname:', err);
         setError(`Gagal menghapus data: ${err.response?.data?.message || err.message}`);
       }
     }
@@ -226,12 +229,14 @@ const StokOpnameAdmin = () => {
     setFormData({
       tanggal_opname: new Date().toISOString().split('T')[0],
       kode_barang: '',
+      product_id: '',
       stok_fisik: '',
       nama_petugas: '',
       catatan: '',
       sesuaikan_stok: false
     });
     setSelectedProduct(null);
+    setSearchProduct('');
     setError('');
     setSuccess('');
   };
@@ -297,6 +302,8 @@ const StokOpnameAdmin = () => {
 
         {/* Form Row 1 */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          
+          {/* 1. Tanggal Opname */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               Tanggal Opname <span className="text-red-500">*</span>
@@ -309,30 +316,90 @@ const StokOpnameAdmin = () => {
             />
           </div>
 
-          <div>
+          {/* 2. Pilih Barang (Dropdown Search) */}
+          <div className="relative" ref={dropdownRef}>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Kode Barang <span className="text-red-500">*</span>
+              Pilih Barang <span className="text-red-500">*</span>
             </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={formData.kode_barang}
-                onChange={(e) => setFormData({ ...formData, kode_barang: e.target.value })}
-                onKeyPress={(e) => e.key === 'Enter' && handleCekBarang()}
-                placeholder="Input barcode"
-                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-              <button
-                onClick={handleCekBarang}
-                disabled={loading}
-                className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors font-medium whitespace-nowrap disabled:bg-gray-400"
-              >
-                <Search className="w-5 h-5" />
-                Cek Barang
-              </button>
+            
+            <div className="relative">
+              {!selectedProduct ? (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowDropdown(!showDropdown)}
+                    className="w-full px-4 py-2.5 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-left bg-white hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="text-gray-500">Pilih produk...</span>
+                  </button>
+                  <ChevronDown className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <div className="flex-1 px-4 py-2.5 border border-purple-300 bg-purple-50 rounded-lg">
+                    <p className="font-semibold text-purple-900">{selectedProduct.nama_barang}</p>
+                    <p className="text-xs text-purple-600">Kode: {selectedProduct.kode_barang}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearSelection}
+                    className="px-3 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                    title="Hapus pilihan"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Dropdown Content Absolute */}
+              {showDropdown && !selectedProduct && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg overflow-hidden">
+                  {/* Search Box */}
+                  <div className="p-3 border-b border-gray-200 bg-gray-50">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        value={searchProduct}
+                        onChange={(e) => setSearchProduct(e.target.value)}
+                        placeholder="Cari nama atau kode barang..."
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  {/* List Item */}
+                  <div className="max-h-64 overflow-y-auto">
+                    {filteredProducts.length === 0 ? (
+                      <div className="p-4 text-center text-gray-500">
+                        <PackageMinus className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                        <p className="text-sm">Tidak ada produk ditemukan</p>
+                      </div>
+                    ) : (
+                      filteredProducts.map((product) => (
+                        <div
+                          key={product.product_id}
+                          onClick={() => handleSelectProduct(product)}
+                          className="p-3 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors"
+                        >
+                          <p className="font-medium text-gray-900">{product.nama_barang}</p>
+                          <div className="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>Kode: {product.kode_barang}</span>
+                            <span className="text-purple-600 font-bold">
+                              Stok Sistem: {product.stok}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
+          {/* 3. Nama Petugas */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               Nama Petugas
@@ -381,12 +448,16 @@ const StokOpnameAdmin = () => {
                   </button>
                 </div>
                 <p className="font-semibold text-purple-600 text-lg">{selectedProduct.stok || 0}</p>
-                <p className="text-xs text-gray-500">Klik ↻ untuk refresh</p>
               </div>
             </div>
+            {selectedProduct.qr_code && (
+                <div className="mt-2">
+                  <QrCode className="w-12 h-12 text-purple-600" />
+                </div>
+            )}
 
-            {/* Stok Fisik Input */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            {/* Stok Fisik Input & Selisih */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 mt-4 pt-4 border-t border-purple-200">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Stok Fisik (Hasil Hitung) <span className="text-red-500">*</span>
@@ -436,7 +507,7 @@ const StokOpnameAdmin = () => {
                 onChange={(e) => setFormData({ ...formData, sesuaikan_stok: e.target.checked })}
                 className="mt-1 w-5 h-5 text-purple-600 focus:ring-purple-500 rounded"
               />
-              <label htmlFor="sesuaikan" className="flex-1">
+              <label htmlFor="sesuaikan" className="flex-1 cursor-pointer">
                 <span className="font-semibold text-red-700">
                   Ya, sesuaikan stok di sistem dengan hasil hitung fisik.
                 </span>
@@ -480,7 +551,7 @@ const StokOpnameAdmin = () => {
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
               >
-                <option value="all">Semua Status Penyesuaian</option>
+                <option value="all">Semua Status</option>
                 <option value="disesuaikan">Disesuaikan</option>
                 <option value="belum">Belum Disesuaikan</option>
               </select>
@@ -488,7 +559,7 @@ const StokOpnameAdmin = () => {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Cari kode atau nama barang..."
+                  placeholder="Cari kode/nama..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-11 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
