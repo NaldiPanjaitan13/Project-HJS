@@ -5,7 +5,8 @@ import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import ResetPassword from "./pages/auth/ResetPassword";
-import EmailVerificationExpired from "./pages/EmailVerification";
+import EmailVerification from "./pages/auth/EmailVerification";
+import VerifyEmail from "./pages/auth/VerifyEmail";
 import DashboardAdmin from "./pages/admin/Layout/DashboardAdmin";
 import DashboardUser from "./pages/DashboardUser";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -14,7 +15,6 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* Default route langsung ke login */}
         <Route path="/" element={<Navigate to="/login" replace />} />
         
         {/* Auth routes */}
@@ -22,9 +22,10 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/email-verification-expired" element={<EmailVerificationExpired />} />
+        <Route path="/email-verification" element={<EmailVerification />} />
+        <Route path="/verify-email/:id" element={<VerifyEmail />} />
         
-        {/* Protected route untuk admin */}
+        {/* Protected routes */}
         <Route 
           path="/dashboard-admin" 
           element={
@@ -34,7 +35,6 @@ function App() {
           } 
         />
         
-        {/* Protected route untuk user */}
         <Route 
           path="/dashboard-user" 
           element={
@@ -44,7 +44,6 @@ function App() {
           } 
         />
         
-        {/* Catch all route */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>

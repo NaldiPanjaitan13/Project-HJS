@@ -12,12 +12,16 @@ use App\Http\Controllers\StockTransactionController;
 use App\Http\Controllers\StockOpnameController;
 use App\Http\Controllers\ProfitReportController;
 use App\Http\Controllers\ProductQrLogController;
+use App\Http\Controllers\VerifyEmailController;
+
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 Route::post('/resend-verification', [AuthController::class, 'resendVerification']);
+Route::get('/email/verify/{id}/{hash}', [VerifyEmailController::class, 'verify'])
+    ->name('verification.verify');
 
 Route::get('/email/verify/{id}/{hash}', function (Request $request, $id, $hash) {
     Log::info('=== EMAIL VERIFICATION ATTEMPT ===', [
