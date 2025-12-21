@@ -30,12 +30,9 @@ class Product extends Model
     protected $casts = [
         'harga_modal' => 'decimal:2',
         'harga_jual' => 'decimal:2',
-        'profit' => 'decimal:2',
         'stok' => 'integer',
         'stok_minimal' => 'integer',
     ];
-
-    protected $appends = ['profit', 'status'];
 
     protected static function boot()
     {
@@ -50,17 +47,20 @@ class Product extends Model
 
     public function user()
     {
-        return $this->belongsTo(User::class, 'user_id', 'user_id');
+        return $this->belongsTo(User::class, 'user_id', 'user_id')
+            ->select('user_id', 'username', 'email');
     }
 
     public function qrLogs()
     {
-        return $this->hasMany(ProductQrLog::class, 'product_id', 'product_id');
+        return $this->hasMany(ProductQrLog::class, 'product_id', 'product_id')
+            ->select('qr_log_id', 'product_id', 'scanned_by', 'created_at');
     }
 
     public function stockTransactions()
     {
-        return $this->hasMany(StockTransaction::class, 'product_id', 'product_id');
+        return $this->hasMany(StockTransaction::class, 'product_id', 'product_id')
+            ->select('transaction_id', 'product_id', 'jenis_transaksi', 'jumlah', 'catatan', 'penanggung_jawab', 'created_at');
     }
 
     public function getProfitAttribute()

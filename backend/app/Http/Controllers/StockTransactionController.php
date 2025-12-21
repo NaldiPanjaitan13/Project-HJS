@@ -17,7 +17,19 @@ class StockTransactionController extends Controller
         DB::enableQueryLog();
         $startTime = microtime(true);
 
-        $query = StockTransaction::with(['product', 'user']);
+        $query = StockTransaction::select([
+            'transaction_id',
+            'product_id',
+            'user_id',
+            'jenis_transaksi',
+            'jumlah',
+            'catatan',
+            'penanggung_jawab',
+            'created_at'
+        ])->with([
+            'product:product_id,kode_barang,nama_barang,stok,satuan', 
+            'user:user_id,username'
+        ]);
 
         if ($request->has('jenis_transaksi')) {
             $query->where('jenis_transaksi', $request->jenis_transaksi);
@@ -44,8 +56,7 @@ class StockTransactionController extends Controller
         
         Log::info('StockTransactionController@index Debug:', [
             'execution_time_ms' => round($executionTime, 2),
-            'total_queries' => count($queries),
-            'queries' => $queries
+            'total_queries' => count($queries)
         ]);
 
         return response()->json([
@@ -53,15 +64,17 @@ class StockTransactionController extends Controller
             'data' => $transactions,
             'debug' => [
                 'execution_time_ms' => round($executionTime, 2),
-                'total_queries' => count($queries),
-                'queries' => $queries
+                'total_queries' => count($queries)
             ]
         ]);
     }
 
     public function show($id)
     {
-        $transaction = StockTransaction::with(['product', 'user'])->find($id);
+        $transaction = StockTransaction::with([
+            'product:product_id,kode_barang,nama_barang,stok,satuan',
+            'user:user_id,username'
+        ])->find($id);
 
         if (!$transaction) {
             return response()->json([
@@ -95,7 +108,9 @@ class StockTransactionController extends Controller
         }
 
         if ($request->jenis_transaksi === 'OUT') {
-            $product = Product::find($request->product_id);
+            $product = Product::select('product_id', 'stok', 'nama_barang')
+                ->find($request->product_id);
+                
             if ($product->stok < $request->jumlah) {
                 return response()->json([
                     'success' => false,
@@ -111,7 +126,10 @@ class StockTransactionController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Transaction created successfully',
-            'data' => $transaction->load(['product', 'user'])
+            'data' => $transaction->load([
+                'product:product_id,kode_barang,nama_barang,stok',
+                'user:user_id,username'
+            ])
         ], 201);
     }
 
@@ -145,26 +163,24 @@ class StockTransactionController extends Controller
         $transaction->update($request->only(['jumlah', 'catatan', 'penanggung_jawab']));
 
         if ($oldJumlah != $newJumlah) {
-            $product = Product::find($transaction->product_id);
-            if ($product) {
-                $difference = $newJumlah - $oldJumlah;
-                
-                if ($transaction->jenis_transaksi === 'IN') {
-                    $product->stok += $difference;
-                } elseif ($transaction->jenis_transaksi === 'OUT') {
-                    $product->stok -= $difference;
-                }
-                
-                $product->save();
+            $difference = $newJumlah - $oldJumlah;
+            
+            Product::where('product_id', $transaction->product_id)
+                ->update([
+                    'stok' => DB::raw("stok + ({$difference} * " . 
+                        ($transaction->jenis_transaksi === 'IN' ? 1 : -1) . ")")
+                ]);
 
-                Cache::forget("product_{$transaction->product_id}");
-            }
+            Cache::forget("product_{$transaction->product_id}");
         }
 
         return response()->json([
             'success' => true,
             'message' => 'Transaction updated successfully',
-            'data' => $transaction->load(['product', 'user'])
+            'data' => $transaction->load([
+                'product:product_id,kode_barang,nama_barang,stok',
+                'user:user_id,username'
+            ])
         ]);
     }
 
@@ -179,18 +195,15 @@ class StockTransactionController extends Controller
             ], 404);
         }
 
-        $product = Product::find($transaction->product_id);
-        if ($product) {
-            if ($transaction->jenis_transaksi === 'IN') {
-                $product->stok -= $transaction->jumlah;
-            } elseif ($transaction->jenis_transaksi === 'OUT') {
-                $product->stok += $transaction->jumlah;
-            }
-            $product->save();
+        $multiplier = $transaction->jenis_transaksi === 'IN' ? -1 : 1;
+        
+        Product::where('product_id', $transaction->product_id)
+            ->update([
+                'stok' => DB::raw("stok + ({$transaction->jumlah} * {$multiplier})")
+            ]);
 
-            Cache::forget("product_{$transaction->product_id}");
-        }
-
+        Cache::forget("product_{$transaction->product_id}");
+        
         $transaction->delete();
 
         return response()->json([
@@ -201,7 +214,8 @@ class StockTransactionController extends Controller
 
     public function getByProduct($productId)
     {
-        $product = Product::find($productId);
+        $product = Product::select('product_id', 'kode_barang', 'nama_barang', 'stok')
+            ->find($productId);
 
         if (!$product) {
             return response()->json([
@@ -210,7 +224,16 @@ class StockTransactionController extends Controller
             ], 404);
         }
 
-        $transactions = StockTransaction::with('user:user_id,name')
+        $transactions = StockTransaction::select([
+                'transaction_id',
+                'jenis_transaksi',
+                'jumlah',
+                'catatan',
+                'penanggung_jawab',
+                'user_id',
+                'created_at'
+            ])
+            ->with('user:user_id,username')
             ->where('product_id', $productId)
             ->latest()
             ->get();
@@ -225,28 +248,39 @@ class StockTransactionController extends Controller
     }
 
     public function getKartuStok($productId)
-{
-    $product = Product::find($productId);
+    {
+        $product = Product::select('product_id', 'kode_barang', 'nama_barang', 'stok')
+            ->find($productId);
 
-    if (!$product) {
+        if (!$product) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Product not found'
+            ], 404);
+        }
+
+        $transactions = StockTransaction::select([
+                'transaction_id',
+                'jenis_transaksi',
+                'jumlah',
+                'catatan',
+                'penanggung_jawab',
+                'user_id',
+                'created_at'
+            ])
+            ->with('user:user_id,username')
+            ->where('product_id', $productId)
+            ->orderBy('created_at', 'asc')
+            ->get();
+
         return response()->json([
-            'success' => false,
-            'message' => 'Product not found'
-        ], 404);
+            'success' => true,
+            'data' => [
+                'product' => $product,
+                'transactions' => $transactions
+            ]
+        ]);
     }
-    $transactions = StockTransaction::with('user:user_id,name')
-        ->where('product_id', $productId)
-        ->orderBy('created_at', 'asc')
-        ->get();
-
-    return response()->json([
-        'success' => true,
-        'data' => [
-            'product' => $product,
-            'transactions' => $transactions
-        ]
-    ]);
-}
 
     public function summary(Request $request)
     {
@@ -259,12 +293,12 @@ class StockTransactionController extends Controller
             $query->whereBetween('created_at', [$request->start_date, $request->end_date]);
         }
 
-        $summary = [
-            'total_in' => $query->clone()->where('jenis_transaksi', 'IN')->sum('jumlah'),
-            'total_out' => $query->clone()->where('jenis_transaksi', 'OUT')->sum('jumlah'),
-            'total_adjust' => $query->clone()->where('jenis_transaksi', 'ADJUST')->count(),
-            'total_transactions' => $query->count()
-        ];
+        $summary = $query->selectRaw("
+            SUM(CASE WHEN jenis_transaksi = 'IN' THEN jumlah ELSE 0 END) as total_in,
+            SUM(CASE WHEN jenis_transaksi = 'OUT' THEN jumlah ELSE 0 END) as total_out,
+            COUNT(CASE WHEN jenis_transaksi = 'ADJUST' THEN 1 END) as total_adjust,
+            COUNT(*) as total_transactions
+        ")->first();
 
         $endTime = microtime(true);
         $executionTime = ($endTime - $startTime) * 1000;
@@ -273,17 +307,20 @@ class StockTransactionController extends Controller
         
         Log::info('StockTransactionController@summary Debug:', [
             'execution_time_ms' => round($executionTime, 2),
-            'total_queries' => count($queries),
-            'queries' => $queries
+            'total_queries' => count($queries)
         ]);
 
         return response()->json([
             'success' => true,
-            'data' => $summary,
+            'data' => [
+                'total_in' => (int) $summary->total_in,
+                'total_out' => (int) $summary->total_out,
+                'total_adjust' => (int) $summary->total_adjust,
+                'total_transactions' => (int) $summary->total_transactions
+            ],
             'debug' => [
                 'execution_time_ms' => round($executionTime, 2),
-                'total_queries' => count($queries),
-                'queries' => $queries
+                'total_queries' => count($queries)
             ]
         ]);
     }

@@ -23,10 +23,53 @@ const DashboardPageAdmin = () => {
     transactionsOut: []
   });
 
+  // ✅ SINGLE useEffect untuk fetch - hanya dipanggil sekali saat mount
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, []); // Empty dependency array
 
+  // ✅ PARALLEL REQUESTS menggunakan Promise.all
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      
+      // ✅ Fetch semua data secara PARALLEL, bukan sequential
+      const [productsResponse, stockSummary, transactionsResponse] = await Promise.all([
+        productapi.getAll(),
+        stockapi.getSummary(),
+        stockapi.getAll({ per_page: 100 })
+      ]);
+
+      // Process products
+      const products = productsResponse.data?.data || [];
+      
+      // Process low stock items
+      const lowStock = products.filter(p => 
+        p.stok_minimal && p.stok <= p.stok_minimal
+      );
+      
+      // Set stats
+      setStats({
+        totalProducts: products.length,
+        totalStockIn: stockSummary.data?.total_in || 0,
+        totalStockOut: stockSummary.data?.total_out || 0,
+        lowStockProducts: lowStock.length
+      });
+      
+      setLowStockItems(lowStock.slice(0, 5));
+      
+      // Set transactions
+      const allTransactions = transactionsResponse.data?.data || [];
+      setRecentTransactions(allTransactions);
+      
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Filter effect - hanya re-calculate ketika period atau transactions berubah
   useEffect(() => {
     const { start, end } = getDateRange(period);
     
@@ -72,39 +115,6 @@ const DashboardPageAdmin = () => {
     return { start: null, end: null };
   };
 
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      const productsResponse = await productapi.getAll();
-      const products = productsResponse.data?.data || [];
-      
-      const stockSummary = await stockapi.getSummary();
-      
-      const lowStock = products.filter(p => 
-        p.stok_minimal && p.stok <= p.stok_minimal
-      );
-      
-      setStats({
-        totalProducts: products.length,
-        totalStockIn: stockSummary.data?.total_in || 0,
-        totalStockOut: stockSummary.data?.total_out || 0,
-        lowStockProducts: lowStock.length
-      });
-      
-      setLowStockItems(lowStock.slice(0, 5));
-      
-      // Fetch all transactions for filtering
-      const transactionsResponse = await stockapi.getAll({ per_page: 100 });
-      const allTransactions = transactionsResponse.data?.data || [];
-      setRecentTransactions(allTransactions);
-      
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const StatCard = ({ title, value, icon: Icon, iconColor, bgColor }) => (
     <div className={`${bgColor} rounded-xl shadow-md p-6 border border-gray-200 hover:shadow-lg transition-all hover:-translate-y-1`}>
       <div className="flex items-center justify-between mb-3">
@@ -143,7 +153,7 @@ const DashboardPageAdmin = () => {
   const getPeriodLabel = () => {
     switch (period) {
       case 'today': return 'Harian';
-      case 'week': return 'Mingguuan';
+      case 'week': return 'Mingguan';
       case 'month': return 'Bulanan';
       default: return 'Semua Waktu';
     }

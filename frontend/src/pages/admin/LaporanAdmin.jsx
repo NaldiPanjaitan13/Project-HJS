@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Download, Eye, FileText, Printer } from 'lucide-react';
 import { stockopnameapi } from '../../services/stockopnameapi';
+import * as XLSX from 'xlsx';
 
 const LaporanAdmin = () => {
   const [filteredData, setFilteredData] = useState([]);
@@ -11,9 +12,9 @@ const LaporanAdmin = () => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   useEffect(() => {
-    // Set default date range (last 7 days)
     const today = new Date();
     const lastWeek = new Date(today);
     lastWeek.setDate(today.getDate() - 7);
@@ -38,7 +39,6 @@ const LaporanAdmin = () => {
       const response = await stockopnameapi.getAll();
       const allData = response.data?.data || [];
       
-      // Filter by date range
       let filtered = allData.filter(item => {
         const itemDate = new Date(item.tanggal_opname);
         const startDate = new Date(filters.tanggal_mulai);
@@ -46,7 +46,6 @@ const LaporanAdmin = () => {
         return itemDate >= startDate && itemDate <= endDate;
       });
 
-      // Filter by status if not 'all'
       if (filters.status_penyesuaian !== 'all') {
         filtered = filtered.filter(item => {
           if (filters.status_penyesuaian === 'disesuaikan') {
@@ -71,51 +70,78 @@ const LaporanAdmin = () => {
     fetchLaporan();
   };
 
+  // ✅ Fixed Export Function
   const handleExportExcel = () => {
-    // Header dengan informasi laporan
-    const header = [
-      ['LAPORAN STOK OPNAME'],
-      [`Periode: ${formatDateFull(filters.tanggal_mulai)} - ${formatDateFull(filters.tanggal_selesai)}`],
-      [''],
-      ['Tanggal', 'Kode Barang', 'Nama Barang', 'Sistem', 'Fisik', 'Selisih', 'Penyesuaian', 'Petugas']
-    ];
+    try {
+      const exportData = filteredData.map((item, index) => ({
+        'No': index + 1,
+        'Tanggal': formatDate(item.tanggal_opname),
+        'Kode Barang': item.product?.kode_barang || '-',
+        'Nama Barang': item.product?.nama_barang || '-',
+        'Stok Sistem': item.stok_sistem || 0,
+        'Stok Fisik': item.stok_fisik || 0,
+        'Selisih': item.selisih || 0,
+        'Status Penyesuaian': item.status_penyesuaian || '-',
+        'Petugas': item.nama_petugas || '-',
+        'Catatan': item.catatan || '-'
+      }));
 
-    // Data rows
-    const dataRows = filteredData.map(item => [
-      formatDate(item.tanggal_opname),
-      item.product?.kode_barang || '',
-      item.product?.nama_barang || '',
-      item.stok_sistem,
-      item.stok_fisik,
-      item.selisih,
-      item.status_penyesuaian === 'Disesuaikan' ? 'Stok Disesuaikan' : 'Tidak Disesuaikan',
-      item.nama_petugas || ''
-    ]);
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
 
-    // Summary footer
-    const summary = [
-      [''],
-      ['RINGKASAN'],
-      ['Total Data', filteredData.length],
-      ['Stok Disesuaikan', filteredData.filter(item => item.status_penyesuaian === 'Disesuaikan').length],
-      ['Tidak Disesuaikan', filteredData.filter(item => item.status_penyesuaian === 'Belum Disesuaikan').length],
-      ['Selisih Positif (+)', filteredData.filter(item => item.selisih > 0).length],
-      ['Selisih Negatif (-)', filteredData.filter(item => item.selisih < 0).length],
-      ['Sesuai (0)', filteredData.filter(item => item.selisih === 0).length]
-    ];
+      ws['!cols'] = [
+        { wch: 5 },  { wch: 12 }, { wch: 15 }, { wch: 30 },
+        { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 18 },
+        { wch: 20 }, { wch: 30 }
+      ];
 
-    // Combine all sections
-    const csvContent = [...header, ...dataRows, ...summary]
-      .map(row => row.join(','))
-      .join('\n');
+      const range = XLSX.utils.decode_range(ws['!ref']);
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          if (!ws[cellAddress]) continue;
+          
+          if (R === 0) {
+            ws[cellAddress].s = {
+              font: { bold: true, color: { rgb: "FFFFFF" } },
+              fill: { fgColor: { rgb: "000000" } },
+              alignment: { horizontal: "center", vertical: "center" },
+              border: {
+                top: { style: "thin", color: { rgb: "000000" } },
+                bottom: { style: "thin", color: { rgb: "000000" } },
+                left: { style: "thin", color: { rgb: "000000" } },
+                right: { style: "thin", color: { rgb: "000000" } }
+              }
+            };
+          } else {
+            ws[cellAddress].s = {
+              alignment: { 
+                horizontal: C === 0 || C === 4 || C === 5 || C === 6 ? "center" : "left",
+                vertical: "center" 
+              },
+              border: {
+                top: { style: "thin", color: { rgb: "CCCCCC" } },
+                bottom: { style: "thin", color: { rgb: "CCCCCC" } },
+                left: { style: "thin", color: { rgb: "CCCCCC" } },
+                right: { style: "thin", color: { rgb: "CCCCCC" } }
+              },
+              fill: { fgColor: { rgb: R % 2 === 0 ? "F9FAFB" : "FFFFFF" } }
+            };
+          }
+        }
+      }
 
-    // Add BOM for Excel UTF-8 support
-    const BOM = '\uFEFF';
-    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `Laporan_Stok_Opname_${filters.tanggal_mulai}_${filters.tanggal_selesai}.csv`;
-    link.click();
+      XLSX.utils.book_append_sheet(wb, ws, "Laporan Stok Opname");
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+      XLSX.writeFile(wb, `Laporan_Stok_Opname_${timestamp}.xlsx`);
+      
+      setSuccess('✓ Data berhasil di-export!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      console.error('Error exporting:', err);
+      setError('Gagal export data');
+      setTimeout(() => setError(''), 3000);
+    }
   };
 
   const handleCetak = () => {
@@ -138,7 +164,6 @@ const LaporanAdmin = () => {
     });
   };
 
-  // Calculate summary statistics
   const totalItems = filteredData.length;
   const totalDisesuaikan = filteredData.filter(item => item.status_penyesuaian === 'Disesuaikan').length;
   const totalBelumDisesuaikan = filteredData.filter(item => item.status_penyesuaian === 'Belum Disesuaikan').length;
@@ -148,7 +173,7 @@ const LaporanAdmin = () => {
 
   return (
     <>
-      {/* Print Styles */}
+      {/* Professional Print Styles */}
       <style>{`
         @media print {
           body * {
@@ -163,84 +188,138 @@ const LaporanAdmin = () => {
             top: 0;
             width: 100%;
             padding: 20px;
+            background: white;
           }
           .no-print {
             display: none !important;
           }
           
-          /* Reset colors to black and white */
-          .print-area {
-            background: white !important;
-            color: black !important;
-          }
-          
-          .print-area table {
-            border-collapse: collapse;
-            width: 100%;
-            border: 2px solid black !important;
-          }
-          
-          .print-area th {
-            background: #e0e0e0 !important;
-            color: black !important;
-            border: 1px solid black !important;
-            padding: 8px !important;
-            font-weight: bold !important;
-          }
-          
-          .print-area td {
-            border: 1px solid black !important;
-            padding: 6px 8px !important;
-            color: black !important;
-          }
-          
-          .print-area .badge-disesuaikan {
-            background: #d0d0d0 !important;
-            color: black !important;
-            border: 1px solid black !important;
-            padding: 2px 8px !important;
-            border-radius: 4px !important;
-            font-weight: bold !important;
-          }
-          
-          .print-area .badge-belum {
-            background: white !important;
-            color: black !important;
-            border: 1px solid black !important;
-            padding: 2px 8px !important;
-            border-radius: 4px !important;
-          }
-          
-          .print-area .selisih-positive {
-            font-weight: bold !important;
-            color: black !important;
-          }
-          
-          .print-area .selisih-negative {
-            font-weight: bold !important;
-            color: black !important;
-          }
-          
+          /* Professional Header */
           .print-header {
             text-align: center;
-            margin-bottom: 20px;
-            border-bottom: 2px solid black;
-            padding-bottom: 10px;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 3px double black;
           }
           
           .print-header h1 {
             font-size: 24px;
             font-weight: bold;
-            margin: 0 0 5px 0;
+            margin: 0 0 8px 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
           }
           
-          .print-header p {
-            font-size: 14px;
-            margin: 0;
+          .print-header .company-name {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 5px;
+          }
+          
+          .print-header .period {
+            font-size: 12px;
+            color: #333;
+            margin-top: 8px;
+          }
+          
+
+          /* Table Styles */
+          .print-area table {
+            border-collapse: collapse;
+            width: 100%;
+            border: 2px solid black;
+            font-size: 10px;
+          }
+          
+          .print-area thead {
+            background: #000 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          
+          .print-area th {
+            background: #000 !important;
+            color: white !important;
+            border: 1px solid black;
+            padding: 8px 6px;
+            font-weight: bold;
+            text-align: center;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          
+          .print-area td {
+            border: 1px solid black;
+            padding: 6px;
+            color: black;
+          }
+          
+          .print-area tbody tr:nth-child(even) {
+            background: #f9f9f9 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          
+          /* Status Badges */
+          .badge-disesuaikan {
+            display: inline-block;
+            padding: 3px 8px;
+            border: 1px solid black;
+            background: #e0e0e0 !important;
+            color: black !important;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 9px;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          
+          .badge-belum {
+            display: inline-block;
+            padding: 3px 8px;
+            border: 1px solid black;
+            background: white !important;
+            color: black !important;
+            border-radius: 4px;
+            font-size: 9px;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          
+          .selisih-positive, .selisih-negative {
+            font-weight: bold;
+          }
+          
+          /* Footer */
+          .print-footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 2px solid black;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            text-align: center;
+          }
+          
+          .print-footer .signature {
+            padding-top: 60px;
+            border-top: 1px solid black;
+            margin-top: 10px;
+          }
+          
+          .print-footer .signature-label {
+            font-size: 11px;
+            font-weight: bold;
+            margin-bottom: 50px;
+          }
+          
+          .print-footer .signature-name {
+            font-size: 11px;
           }
           
           @page {
-            margin: 1cm;
+            margin: 1.5cm;
+            size: A4 landscape;
           }
         }
       `}</style>
@@ -257,6 +336,18 @@ const LaporanAdmin = () => {
               <p className="text-gray-600 mt-1">Laporan hasil pengecekan stok fisik gudang</p>
             </div>
           </div>
+
+          {/* Success/Error Messages */}
+          {success && (
+            <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
+              {success}
+            </div>
+          )}
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+              {error}
+            </div>
+          )}
 
           {/* Filter Section */}
           <div className="bg-gray-50 rounded-lg p-5 mb-6">
@@ -318,18 +409,19 @@ const LaporanAdmin = () => {
           <div className="flex gap-3">
             <button
               onClick={handleCetak}
-              className="flex items-center gap-2 px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-semibold"
+              disabled={filteredData.length === 0}
+              className="flex items-center gap-2 px-6 py-2.5 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Printer className="w-5 h-5" />
-              Cetak
+              Cetak Laporan
             </button>
             <button
               onClick={handleExportExcel}
               disabled={filteredData.length === 0}
-              className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold disabled:bg-gray-300 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-6 py-2.5 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="w-5 h-5" />
-              Export ke Excel
+              Export Excel
             </button>
           </div>
         </div>
@@ -366,28 +458,27 @@ const LaporanAdmin = () => {
 
         {/* Print Area */}
         <div className="print-area">
-          {/* Print Header */}
+          {/* Professional Print Header */}
           <div className="print-header">
+            <div className="company-name">PT. INVENTARIS SYSTEM</div>
             <h1>Laporan Stok Opname</h1>
             {filters.tanggal_mulai && filters.tanggal_selesai && (
-              <p>Periode: {formatDate(filters.tanggal_mulai)} - {formatDate(filters.tanggal_selesai)}</p>
+              <div className="period">
+                Periode: {formatDateFull(filters.tanggal_mulai)} - {formatDateFull(filters.tanggal_selesai)}
+              </div>
             )}
           </div>
 
+
+
           {/* Report Table */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-            {error && (
-              <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 no-print">
-                {error}
-              </div>
-            )}
-
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="bg-gray-100">
+                  <tr className="bg-indigo-600 text-white">
                     <th className="text-left py-3 px-4 border border-gray-300 text-sm font-bold">Tanggal</th>
-                    <th className="text-left py-3 px-4 border border-gray-300 text-sm font-bold">Kode Barang</th>
+                    <th className="text-left py-3 px-4 border border-gray-300 text-sm font-bold">Kode</th>
                     <th className="text-left py-3 px-4 border border-gray-300 text-sm font-bold">Nama Barang</th>
                     <th className="text-center py-3 px-4 border border-gray-300 text-sm font-bold">Sistem</th>
                     <th className="text-center py-3 px-4 border border-gray-300 text-sm font-bold">Fisik</th>
@@ -409,7 +500,6 @@ const LaporanAdmin = () => {
                       <td colSpan="8" className="text-center py-12 text-gray-500 border border-gray-300">
                         <FileText className="w-16 h-16 mx-auto mb-4 text-gray-300 no-print" />
                         <p className="text-lg font-medium">Tidak ada data untuk periode yang dipilih</p>
-                        <p className="text-sm mt-1">Silakan ubah filter untuk melihat data</p>
                       </td>
                     </tr>
                   ) : (
@@ -441,7 +531,7 @@ const LaporanAdmin = () => {
                         </td>
                         <td className="py-2.5 px-4 text-center border border-gray-300">
                           <span className={item.status_penyesuaian === 'Disesuaikan' ? 'badge-disesuaikan' : 'badge-belum'}>
-                            {item.status_penyesuaian === 'Disesuaikan' ? 'Stok Disesuaikan' : 'Tidak Disesuaikan'}
+                            {item.status_penyesuaian === 'Disesuaikan' ? '✓ Disesuaikan' : '⊗ Belum'}
                           </span>
                         </td>
                         <td className="py-2.5 px-4 text-sm text-gray-900 border border-gray-300">
@@ -456,10 +546,37 @@ const LaporanAdmin = () => {
 
             {filteredData.length > 0 && (
               <div className="px-6 py-4 bg-gray-50 border-t border-gray-300 text-sm text-gray-700">
-                Menampilkan {filteredData.length} data dari {formatDate(filters.tanggal_mulai)} sampai {formatDate(filters.tanggal_selesai)}
+                Menampilkan {filteredData.length} data dari {formatDateFull(filters.tanggal_mulai)} sampai {formatDateFull(filters.tanggal_selesai)}
               </div>
             )}
           </div>
+
+          {/* Professional Footer with Signatures */}
+          {filteredData.length > 0 && (
+            <div className="print-footer">
+              <div>
+                <div className="signature-label">Dibuat Oleh,</div>
+                <div className="signature">
+                  <div className="signature-name">(_________________)</div>
+                  <div style={{fontSize: '10px', marginTop: '5px'}}>Admin Gudang</div>
+                </div>
+              </div>
+              <div>
+                <div className="signature-label">Diperiksa Oleh,</div>
+                <div className="signature">
+                  <div className="signature-name">(_________________)</div>
+                  <div style={{fontSize: '10px', marginTop: '5px'}}>Supervisor</div>
+                </div>
+              </div>
+              <div>
+                <div className="signature-label">Disetujui Oleh,</div>
+                <div className="signature">
+                  <div className="signature-name">(_________________)</div>
+                  <div style={{fontSize: '10px', marginTop: '5px'}}>Manager</div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>

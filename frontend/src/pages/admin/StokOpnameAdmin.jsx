@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, Save, RotateCcw, ClipboardCheck, AlertCircle, Download, CheckCircle, XCircle, ChevronDown, X, PackageMinus, QrCode } from 'lucide-react';
 import { productapi } from '../../services/productapi';
 import { stockopnameapi } from '../../services/stockopnameapi';
+import * as XLSX from 'xlsx';
 
 const StokOpnameAdmin = () => {
   const [formData, setFormData] = useState({
@@ -242,27 +243,84 @@ const StokOpnameAdmin = () => {
   };
 
   const handleExport = () => {
-    const csvContent = [
-      ['Tanggal', 'Kode', 'Nama Barang', 'Sistem', 'Fisik', 'Selisih', 'Petugas', 'Status', 'Catatan'],
-      ...filteredOpnames.map(o => [
-        formatDate(o.tanggal_opname),
-        o.product?.kode_barang || '',
-        o.product?.nama_barang || '',
-        o.stok_sistem,
-        o.stok_fisik,
-        o.selisih,
-        o.nama_petugas || '',
-        o.status_penyesuaian,
-        o.catatan || ''
-      ])
-    ].map(row => row.join(',')).join('\n');
+  try {
+    const exportData = filteredOpnames.map((opname, index) => ({
+      'No': index + 1,
+      'Tanggal': formatDate(opname.tanggal_opname),
+      'Kode Barang': opname.product?.kode_barang || '-',
+      'Nama Barang': opname.product?.nama_barang || '-',
+      'Stok Sistem': opname.stok_sistem || 0,
+      'Stok Fisik': opname.stok_fisik || 0,
+      'Selisih': opname.selisih || 0,
+      'Petugas': opname.nama_petugas || '-',
+      'Status Penyesuaian': opname.status_penyesuaian || '-',
+      'Catatan': opname.catatan || '-'
+    }));
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `stok_opname_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-  };
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(exportData);
+
+    ws['!cols'] = [
+      { wch: 5 },  // No
+      { wch: 12 }, // Tanggal
+      { wch: 15 }, // Kode Barang
+      { wch: 30 }, // Nama Barang
+      { wch: 12 }, // Stok Sistem
+      { wch: 12 }, // Stok Fisik
+      { wch: 10 }, // Selisih
+      { wch: 20 }, // Petugas
+      { wch: 18 }, // Status
+      { wch: 30 }  // Catatan
+    ];
+
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cellAddress]) continue;
+        
+        if (R === 0) {
+          ws[cellAddress].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: "000000" } },
+            alignment: { horizontal: "center", vertical: "center" },
+            border: {
+              top: { style: "thin", color: { rgb: "000000" } },
+              bottom: { style: "thin", color: { rgb: "000000" } },
+              left: { style: "thin", color: { rgb: "000000" } },
+              right: { style: "thin", color: { rgb: "000000" } }
+            }
+          };
+        } else {
+          ws[cellAddress].s = {
+            alignment: { 
+              horizontal: C === 0 || C === 4 || C === 5 || C === 6 ? "center" : "left",
+              vertical: "center" 
+            },
+            border: {
+              top: { style: "thin", color: { rgb: "CCCCCC" } },
+              bottom: { style: "thin", color: { rgb: "CCCCCC" } },
+              left: { style: "thin", color: { rgb: "CCCCCC" } },
+              right: { style: "thin", color: { rgb: "CCCCCC" } }
+            },
+            fill: { fgColor: { rgb: R % 2 === 0 ? "F9FAFB" : "FFFFFF" } }
+          };
+        }
+      }
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws, "Stok Opname");
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    XLSX.writeFile(wb, `Stok_Opname_${timestamp}.xlsx`);
+    
+    setSuccess('✓ Data berhasil di-export!');
+    setTimeout(() => setSuccess(''), 3000);
+  } catch (err) {
+    console.error('Error exporting:', err);
+    setError('Gagal export data');
+    setTimeout(() => setError(''), 3000);
+  }
+};
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('id-ID', {
