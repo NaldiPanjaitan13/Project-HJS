@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Edit2, Trash2, X, Package, Download, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, X, Package, Download, CheckCircle2, AlertCircle, QrCode, Printer } from 'lucide-react';
 import { productapi } from '../../services/productapi';
 import * as XLSX from 'xlsx';
+import QRCodeLib from 'qrcode';
 
 const ProductManagementAdmin = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [selectedQRProduct, setSelectedQRProduct] = useState(null);
+  const [qrCodeDataURL, setQrCodeDataURL] = useState('');
   const [modalMode, setModalMode] = useState('add');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -14,7 +18,6 @@ const ProductManagementAdmin = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // ✅ Pagination state
   const [pagination, setPagination] = useState({
     currentPage: 1,
     totalPages: 1,
@@ -32,10 +35,8 @@ const ProductManagementAdmin = () => {
     harga_jual: ''
   });
 
-  // ✅ Export to Excel Function
   const handleExport = () => {
     try {
-      // Prepare data untuk export
       const exportData = filteredProducts.map((product, index) => ({
         'No': index + 1,
         'Kode Barang': product.kode_barang || '-',
@@ -49,35 +50,21 @@ const ProductManagementAdmin = () => {
         'Harga Jual': product.harga_jual || 0
       }));
 
-      // Buat workbook dan worksheet
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(exportData);
 
-      // Set column widths
       ws['!cols'] = [
-        { wch: 5 },  // No
-        { wch: 15 }, // Kode Barang
-        { wch: 30 }, // Nama Barang
-        { wch: 15 }, // Jenis Barang
-        { wch: 10 }, // Satuan
-        { wch: 12 }, // Stok Minimal
-        { wch: 12 }, // Status
-        { wch: 10 }, // Stok
-        { wch: 15 }, // Harga Modal
-        { wch: 15 }  // Harga Jual
+        { wch: 5 }, { wch: 15 }, { wch: 30 }, { wch: 15 },
+        { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+        { wch: 15 }, { wch: 15 }
       ];
 
-      // Styling untuk header (baris pertama)
       const range = XLSX.utils.decode_range(ws['!ref']);
-      
-      // Style untuk semua cell
       for (let R = range.s.r; R <= range.e.r; ++R) {
         for (let C = range.s.c; C <= range.e.c; ++C) {
           const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
-          
           if (!ws[cellAddress]) continue;
           
-          // Style untuk header (row pertama)
           if (R === 0) {
             ws[cellAddress].s = {
               font: { bold: true, color: { rgb: "FFFFFF" } },
@@ -91,7 +78,6 @@ const ProductManagementAdmin = () => {
               }
             };
           } else {
-            // Style untuk data rows
             ws[cellAddress].s = {
               alignment: { 
                 horizontal: C === 0 || C === 5 || C === 6 || C === 7 ? "center" : "left",
@@ -109,26 +95,19 @@ const ProductManagementAdmin = () => {
         }
       }
 
-      // Tambahkan worksheet ke workbook
       XLSX.utils.book_append_sheet(wb, ws, "Data Produk");
-
-      // Generate filename dengan timestamp
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-      const filename = `Data_Produk_${timestamp}.xlsx`;
-
-      // Export file
-      XLSX.writeFile(wb, filename);
+      XLSX.writeFile(wb, `Data_Produk_${timestamp}.xlsx`);
       
       setSuccess('✓ Data berhasil di-export!');
       setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      console.error('Error exporting:', err);
+    } catch (error) {
+      console.error('Export error:', error);
       setError('Gagal export data');
       setTimeout(() => setError(''), 3000);
     }
   };
 
-  // ✅ Fetch saat mount dan saat ganti halaman
   useEffect(() => {
     fetchProducts();
   }, [pagination.currentPage]);
@@ -146,16 +125,15 @@ const ProductManagementAdmin = () => {
       
       setProducts(productList);
       
-      // ✅ Update pagination info
       setPagination(prev => ({
         ...prev,
         totalPages: responseData.last_page || responseData.total_pages || 1,
         totalItems: responseData.total || productList.length,
         currentPage: responseData.current_page || prev.currentPage
       }));
-    } catch (err) {
+    } catch (error) {
+      console.error('Fetch products error:', error);
       setError('Gagal memuat data produk');
-      console.error('Error fetching products:', err);
     } finally {
       setLoading(false);
     }
@@ -226,13 +204,13 @@ const ProductManagementAdmin = () => {
       }
       
       setTimeout(() => {
-        setPagination(prev => ({ ...prev, currentPage: 1 })); // Reset ke halaman 1
+        setPagination(prev => ({ ...prev, currentPage: 1 }));
         fetchProducts();
         handleCloseModal();
       }, 1500);
-    } catch (err) {
-      console.error('Error details:', err.response?.data);
-      setError(err.response?.data?.message || 'Gagal menyimpan produk');
+    } catch (error) {
+      console.error('Submit error:', error);
+      setError(error.response?.data?.message || 'Gagal menyimpan produk');
     }
   };
 
@@ -243,14 +221,106 @@ const ProductManagementAdmin = () => {
         setSuccess('✓ Produk berhasil dihapus!');
         fetchProducts();
         setTimeout(() => setSuccess(''), 3000);
-      } catch (err) {
+      } catch (error) {
+        console.error('Delete error:', error);
         setError('Gagal menghapus produk');
-        console.error('Error deleting product:', err);
       }
     }
   };
 
-  // ✅ Client-side filtering
+  const handleOpenQRModal = async (product) => {
+    setSelectedQRProduct(product);
+    setShowQRModal(true);
+    
+    try {
+      const qrData = product.kode_barang;
+      const dataURL = await QRCodeLib.toDataURL(qrData, {
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      });
+      setQrCodeDataURL(dataURL);
+    } catch (error) {
+      console.error('QR generation error:', error);
+      setError('Gagal generate QR Code');
+    }
+  };
+
+  const handleDownloadQR = () => {
+    if (!qrCodeDataURL || !selectedQRProduct) return;
+
+    const link = document.createElement('a');
+    link.href = qrCodeDataURL;
+    link.download = `QR_${selectedQRProduct.kode_barang}_${selectedQRProduct.nama_barang}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    setSuccess('✓ QR Code berhasil didownload!');
+    setTimeout(() => setSuccess(''), 3000);
+  };
+
+  const handlePrintQR = () => {
+    if (!selectedQRProduct) return;
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Print QR Code - ${selectedQRProduct.nama_barang}</title>
+          <style>
+            body {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              min-height: 100vh;
+              margin: 0;
+              font-family: Arial, sans-serif;
+              padding: 20px;
+            }
+            .qr-container {
+              text-align: center;
+              border: 2px solid #000;
+              padding: 30px;
+              border-radius: 10px;
+            }
+            .product-info {
+              margin-top: 20px;
+            }
+            h2 { margin: 10px 0; }
+            p { margin: 5px 0; font-size: 14px; }
+            img { max-width: 300px; }
+            @media print {
+              body { padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="qr-container">
+            <img src="${qrCodeDataURL}" alt="QR Code">
+            <div class="product-info">
+              <h2>${selectedQRProduct.nama_barang}</h2>
+              <p><strong>Kode:</strong> ${selectedQRProduct.kode_barang}</p>
+              <p><strong>Jenis:</strong> ${selectedQRProduct.jenis_barang || '-'}</p>
+              <p><strong>Satuan:</strong> ${selectedQRProduct.satuan}</p>
+            </div>
+          </div>
+          <script>
+            window.onload = () => {
+              window.print();
+              setTimeout(() => window.close(), 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const filteredProducts = products.filter(product => {
     const matchesSearch = 
       product.nama_barang?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -278,7 +348,7 @@ const ProductManagementAdmin = () => {
             <button
               onClick={handleExport}
               disabled={filteredProducts.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all font-medium shadow-md hover:shadow-lg"
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all font-medium shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="w-5 h-5" />
               Export Excel
@@ -400,6 +470,13 @@ const ProductManagementAdmin = () => {
                     <td className="py-4 px-6">
                       <div className="flex items-center justify-center gap-2">
                         <button
+                          onClick={() => handleOpenQRModal(product)}
+                          className="p-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 transition-all hover:scale-110"
+                          title="QR Code"
+                        >
+                          <QrCode className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => handleOpenModal('edit', product)}
                           className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-all hover:scale-110"
                           title="Edit"
@@ -431,7 +508,6 @@ const ProductManagementAdmin = () => {
                 {pagination.totalPages > 1 && ` (Halaman ${pagination.currentPage} dari ${pagination.totalPages})`}
               </p>
               
-              {/* ✅ Pagination Controls */}
               {pagination.totalPages > 1 && (
                 <div className="flex items-center gap-2">
                   <button
@@ -442,7 +518,6 @@ const ProductManagementAdmin = () => {
                     ← Prev
                   </button>
                   
-                  {/* Page Numbers */}
                   <div className="flex gap-1">
                     {Array.from({ length: Math.min(pagination.totalPages, 5) }, (_, i) => {
                       let pageNum;
@@ -485,6 +560,65 @@ const ProductManagementAdmin = () => {
           </div>
         )}
       </div>
+
+      {/* Modal QR Code */}
+      {showQRModal && selectedQRProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md animate-in zoom-in duration-300">
+            <div className="bg-gradient-to-r from-purple-600 to-purple-800 text-white px-6 py-4 rounded-t-xl flex items-center justify-between">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <QrCode className="w-6 h-6" />
+                QR Code Produk
+              </h3>
+              <button
+                onClick={() => setShowQRModal(false)}
+                className="p-2 hover:bg-white/20 rounded-lg transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 text-center space-y-4">
+              <div className="bg-gray-50 p-6 rounded-xl border-2 border-purple-200">
+                {qrCodeDataURL && (
+                  <img 
+                    src={qrCodeDataURL} 
+                    alt="QR Code" 
+                    className="w-64 h-64 mx-auto"
+                  />
+                )}
+              </div>
+
+              <div className="text-left bg-gradient-to-r from-purple-50 to-purple-100 p-4 rounded-lg border border-purple-200">
+                <h4 className="font-bold text-purple-900 mb-2">{selectedQRProduct.nama_barang}</h4>
+                <div className="space-y-1 text-sm text-purple-700">
+                  <p><strong>Kode:</strong> {selectedQRProduct.kode_barang}</p>
+                  <p><strong>Jenis:</strong> {selectedQRProduct.jenis_barang || '-'}</p>
+                  <p><strong>Satuan:</strong> {selectedQRProduct.satuan}</p>
+                  <p><strong>Stok:</strong> {selectedQRProduct.stok || 0}</p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleDownloadQR}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all font-semibold shadow-md"
+                >
+                  <Download className="w-5 h-5" />
+                  Download PNG
+                </button>
+                <button
+                  onClick={handlePrintQR}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-semibold shadow-md"
+                >
+                  <Printer className="w-5 h-5" />
+                  Print
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Add/Edit */}
       {showModal && (

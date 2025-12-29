@@ -147,7 +147,7 @@ Route::prefix('dev')->group(function () {
     Route::post('/products', [ProductController::class, 'store']);
     Route::put('/products/{id}', [ProductController::class, 'update']);
     Route::delete('/products/{id}', [ProductController::class, 'destroy']);
-    Route::post('/products/scan-qr', [ProductController::class, 'scanQr']);
+    Route::post('/products/scan-qr', [ProductController::class, 'scanQrCode']);
 
     // Stock Transactions
     Route::get('/stock-transactions', [StockTransactionController::class, 'index']);
@@ -197,7 +197,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/', [ProductController::class, 'store']);
         Route::put('/{id}', [ProductController::class, 'update']);
         Route::delete('/{id}', [ProductController::class, 'destroy']);
-        Route::post('/scan-qr', [ProductController::class, 'scanQr']);
+        Route::post('/scan-qr', [ProductController::class, 'scanQrCode']);
     });
 
     // Stock Transactions Routes
@@ -234,10 +234,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // QR Logs Routes
     Route::prefix('qr-logs')->group(function () {
         Route::get('/', [ProductQrLogController::class, 'index']);
+        Route::get('/statistics', [ProductQrLogController::class, 'statistics']);
+        Route::get('/product/{productId}', [ProductQrLogController::class, 'getByProduct']);
         Route::get('/{id}', [ProductQrLogController::class, 'show']);
         Route::delete('/{id}', [ProductQrLogController::class, 'destroy']);
-        Route::get('/product/{productId}', [ProductQrLogController::class, 'getByProduct']);
-        Route::get('/statistics/all', [ProductQrLogController::class, 'statistics']);
     });
 
     // Admin Only Routes

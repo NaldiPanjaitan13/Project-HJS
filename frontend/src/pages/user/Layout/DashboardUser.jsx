@@ -5,12 +5,8 @@ import {
   LogOut, ChevronsLeft, ChevronsRight, 
   User, X, Menu 
 } from 'lucide-react';
-
 import DashboardUserPage from '../DashboardUserPage';
-// Import komponen lain nanti
-// import QRScannerUser from '../QRScannerUser';
-// import BarangMasukUser from '../BarangMasukUser';
-// import BarangKeluarUser from '../BarangKeluarUser';
+import QRScannerUser from '../ScanQRcodePage';
 
 const DashboardUser = () => {
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
@@ -45,7 +41,7 @@ const DashboardUser = () => {
   const renderActivePage = () => {
     const components = {
       'dashboard': <DashboardUserPage />,
-      // 'qr-scanner': <QRScannerUser />,
+      'qr-scanner': <QRScannerUser />,
       // 'barang-masuk': <BarangMasukUser />,
       // 'barang-keluar': <BarangKeluarUser />
     };

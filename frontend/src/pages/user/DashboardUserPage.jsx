@@ -64,7 +64,7 @@ const DashboardPageUser = () => {
       setRecentTransactions(allTransactions.slice(0, 10));
       
     } catch {
-      // Error handling - bisa ditambahkan state error jika diperlukan
+      console.error('Gagal mengambil data dashboard');
     } finally {
       setLoading(false);
     }

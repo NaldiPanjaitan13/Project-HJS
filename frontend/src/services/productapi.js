@@ -137,12 +137,17 @@ export const productapi = {
   },
 
   scanQr: async (qrData) => {
+  try {
     const response = await api.post('/dev/products/scan-qr', qrData);
-    return response.data;
-  },
+    return response;  
+  } catch (error) {
+    console.error('Scan QR API Error:', error.response?.data || error);
+    throw error;  
+  }
+},
 
   clearCache: () => {
     cache.invalidate('*');
     console.log('🗑️ All cache cleared');
   }
-};
+};  

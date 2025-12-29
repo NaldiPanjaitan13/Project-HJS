@@ -59,6 +59,7 @@ class ProductController extends Controller
             'total_queries' => count($queries),
             'queries' => $queries
         ]);
+
         return response()->json([
             'success' => true,
             'data' => $products,
@@ -71,60 +72,61 @@ class ProductController extends Controller
     }
 
     public function getForDropdown(Request $request)
-{
-    try {
-        $query = Product::select('product_id', 'kode_barang', 'nama_barang', 'jenis_barang', 'satuan', 'stok', 'harga_modal', 'harga_jual');
-        
-        if ($request->has('only_available') && $request->only_available == true) {
-            $query->where('stok', '>', 0);
-        }
+    {
+        try {
+            $query = Product::select('product_id', 'kode_barang', 'nama_barang', 'jenis_barang', 'satuan', 'stok', 'harga_modal', 'harga_jual');
+            
+            if ($request->has('only_available') && $request->only_available == true) {
+                $query->where('stok', '>', 0);
+            }
 
-        if ($request->has('search') && !empty($request->search)) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('nama_barang', 'like', "%{$search}%")
-                  ->orWhere('kode_barang', 'like', "%{$search}%");
-            });
-        }
+            if ($request->has('search') && !empty($request->search)) {
+                $search = $request->search;
+                $query->where(function($q) use ($search) {
+                    $q->where('nama_barang', 'like', "%{$search}%")
+                      ->orWhere('kode_barang', 'like', "%{$search}%");
+                });
+            }
 
-        $products = $query->orderBy('nama_barang', 'asc')->get();
-        \Log::info('ProductController@getForDropdown:', [
-            'total_products' => $products->count(),
-            'only_available' => $request->only_available,
-            'products' => $products->toArray()
-        ]);
+            $products = $query->orderBy('nama_barang', 'asc')->get();
+            
+            Log::info('ProductController@getForDropdown:', [
+                'total_products' => $products->count(),
+                'only_available' => $request->only_available,
+                'products' => $products->toArray()
+            ]);
 
-        return response()->json([
-            'success' => true,
-            'data' => $products
-        ]);
+            return response()->json([
+                'success' => true,
+                'data' => $products
+            ]);
 
-    } catch (\Exception $e) {
-        Log::error('Error getting products for dropdown: ' . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to get products',
-            'error' => $e->getMessage()
-        ], 500);
+        } catch (\Exception $e) {
+            Log::error('Error getting products for dropdown: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get products',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 
     public function show($id)
     {
         $product = Product::with(['user', 'qrLogs', 'stockTransactions'])
-        ->find($id);
+            ->find($id);
     
-    if (!$product) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Product not found'
-        ], 404);
-    }
+        if (!$product) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Product not found'
+            ], 404);
+        }
 
-    return response()->json([
-        'success' => true,
-        'data' => $product
-    ]);
+        return response()->json([
+            'success' => true,
+            'data' => $product
+        ]);
     }
 
     public function store(Request $request)
@@ -142,20 +144,20 @@ class ProductController extends Controller
         ]);
 
         if ($validator->fails()) {
-        \Log::error('Product validation failed:', [
-            'errors' => $validator->errors()->toArray(),
-            'request_data' => $request->all()
-        ]);
+            Log::error('Product validation failed:', [
+                'errors' => $validator->errors()->toArray(),
+                'request_data' => $request->all()
+            ]);
 
-        return response()->json([
-            'success' => false,
-            'message' => 'Validasi gagal',
-            'errors' => $validator->errors()
-        ], 422);
-    }
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal',
+                'errors' => $validator->errors()
+            ], 422);
+        }
 
         try {
-            \DB::beginTransaction();
+            DB::beginTransaction();
 
             $product = Product::create($request->all());
 
@@ -164,10 +166,10 @@ class ProductController extends Controller
                 $product->qr_code = $qrCode;
                 $product->save();
             } catch (\Exception $e) {
-                \Log::error('QR Code generation failed: ' . $e->getMessage());
+                Log::error('QR Code generation failed: ' . $e->getMessage());
             }
 
-            \DB::commit();
+            DB::commit();
             Cache::forget("product_{$product->product_id}");
 
             return response()->json([
@@ -177,8 +179,8 @@ class ProductController extends Controller
             ], 201);
 
         } catch (\Exception $e) {
-            \DB::rollBack();
-            \Log::error('Product creation failed: ' . $e->getMessage());
+            DB::rollBack();
+            Log::error('Product creation failed: ' . $e->getMessage());
             
             return response()->json([
                 'success' => false,
@@ -248,30 +250,68 @@ class ProductController extends Controller
         ]);
     }
 
-    public function scanQr(Request $request)
+    /**
+     * Scan QR Code to find product
+     * Method name HARUS 'scanQrCode' sesuai route
+     */
+    public function scanQrCode(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'uuid' => 'required|string|exists:products,uuid',
-            'scanned_by' => 'nullable|string'
+            'qr_code' => 'required|string'
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
+                'message' => 'QR Code wajib diisi',
                 'errors' => $validator->errors()
             ], 422);
         }
 
-        $product = Product::where('uuid', $request->uuid)->first();
+        try {
+            // Cari produk berdasarkan kode_barang, uuid, atau qr_code
+            $product = Product::where('kode_barang', $request->qr_code)
+                ->orWhere('uuid', $request->qr_code)
+                ->orWhere('qr_code', $request->qr_code)
+                ->first();
 
-        $product->qrLogs()->create([
-            'scanned_by' => $request->scanned_by
-        ]);
+            if (!$product) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Produk tidak ditemukan'
+                ], 404);
+            }
 
-        return response()->json([
-            'success' => true,
-            'message' => 'QR Code scanned successfully',
-            'data' => $product
-        ]);
+            // Log scan activity (opsional)
+            if (class_exists('App\Models\ProductQrLog')) {
+                try {
+                    \App\Models\ProductQrLog::create([
+                        'product_id' => $product->product_id,
+                        'scanned_by' => auth()->check() ? auth()->user()->name : 'Guest',
+                        'scanned_at' => now()
+                    ]);
+                } catch (\Exception $e) {
+                    Log::warning('Failed to log QR scan: ' . $e->getMessage());
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Produk ditemukan',
+                'data' => $product
+            ], 200);
+            
+        } catch (\Exception $e) {
+            Log::error('Scan QR Error: ' . $e->getMessage(), [
+                'qr_code' => $request->qr_code,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan saat memindai QR code',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
     }
 }
