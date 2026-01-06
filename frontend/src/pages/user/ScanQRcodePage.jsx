@@ -96,11 +96,6 @@ const QRScannerUser = () => {
       const product = response.data.data;
       setScannedProduct(product);
       saveScanToHistory(product);
-      setSuccess(`✓ Produk ditemukan: ${product.nama_barang}`);
-      
-      setTimeout(() => {
-        setSuccess('');
-      }, 3000);
       
       return true;
     } else {

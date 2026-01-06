@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import DashboardUserPage from '../DashboardUserPage';
 import QRScannerUser from '../ScanQRcodePage';
+import BarangMasukUser from '../BarangMasukUser';
+import BarangKeluarUser from '../BarangKeluarUser';
 
 const DashboardUser = () => {
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
@@ -29,6 +31,11 @@ const DashboardUser = () => {
     setIsMobileMenuOpen(false);
   };
 
+  // Fungsi untuk navigasi dari dashboard buttons
+  const handleNavigateFromDashboard = (menuId) => {
+    setActiveMenu(menuId);
+  };
+
   const handleLogoutClick = () => setShowConfirmModal(true);
 
   const handleConfirmLogout = () => {
@@ -40,12 +47,12 @@ const DashboardUser = () => {
 
   const renderActivePage = () => {
     const components = {
-      'dashboard': <DashboardUserPage />,
+      'dashboard': <DashboardUserPage onNavigate={handleNavigateFromDashboard} />,
       'qr-scanner': <QRScannerUser />,
-      // 'barang-masuk': <BarangMasukUser />,
-      // 'barang-keluar': <BarangKeluarUser />
+      'barang-masuk': <BarangMasukUser />,
+      'barang-keluar': <BarangKeluarUser />
     };
-    return components[activeMenu] || <DashboardUserPage />;
+    return components[activeMenu] || <DashboardUserPage onNavigate={handleNavigateFromDashboard} />;
   };
 
   return (

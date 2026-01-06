@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class ProductController extends Controller
@@ -285,9 +286,16 @@ class ProductController extends Controller
             // Log scan activity (opsional)
             if (class_exists('App\Models\ProductQrLog')) {
                 try {
+                    $scannedBy = 'Guest';
+                    
+                    // Fix: Gunakan Auth facade yang sudah di-import
+                    if (Auth::check()) {
+                        $scannedBy = Auth::user()->name;
+                    }
+                    
                     \App\Models\ProductQrLog::create([
                         'product_id' => $product->product_id,
-                        'scanned_by' => auth()->check() ? auth()->user()->name : 'Guest',
+                        'scanned_by' => $scannedBy,
                         'scanned_at' => now()
                     ]);
                 } catch (\Exception $e) {
