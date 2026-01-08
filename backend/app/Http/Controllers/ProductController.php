@@ -250,11 +250,7 @@ class ProductController extends Controller
             'message' => 'Product deleted successfully'
         ]);
     }
-
-    /**
-     * Scan QR Code to find product
-     * Method name HARUS 'scanQrCode' sesuai route
-     */
+ 
     public function scanQrCode(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -269,8 +265,7 @@ class ProductController extends Controller
             ], 422);
         }
 
-        try {
-            // Cari produk berdasarkan kode_barang, uuid, atau qr_code
+        try { 
             $product = Product::where('kode_barang', $request->qr_code)
                 ->orWhere('uuid', $request->qr_code)
                 ->orWhere('qr_code', $request->qr_code)
@@ -282,13 +277,11 @@ class ProductController extends Controller
                     'message' => 'Produk tidak ditemukan'
                 ], 404);
             }
-
-            // Log scan activity (opsional)
+ 
             if (class_exists('App\Models\ProductQrLog')) {
                 try {
                     $scannedBy = 'Guest';
-                    
-                    // Fix: Gunakan Auth facade yang sudah di-import
+                     
                     if (Auth::check()) {
                         $scannedBy = Auth::user()->name;
                     }

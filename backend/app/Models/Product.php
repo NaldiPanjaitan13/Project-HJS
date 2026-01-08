@@ -12,11 +12,12 @@ class Product extends Model
 
     protected $table = 'products';
     protected $primaryKey = 'product_id';
+    public $incrementing = true;
+    protected $keyType = 'int';
+    public $timestamps = true;
 
     protected $fillable = [
-        'user_id',
         'kode_barang',
-        'uuid',
         'nama_barang',
         'jenis_barang',
         'satuan',
@@ -25,19 +26,25 @@ class Product extends Model
         'harga_modal',
         'harga_jual',
         'qr_code',
+        'uuid',
+        'user_id'
     ];
 
     protected $casts = [
-        'harga_modal' => 'decimal:2',
-        'harga_jual' => 'decimal:2',
         'stok' => 'integer',
         'stok_minimal' => 'integer',
+        'harga_modal' => 'decimal:2',
+        'harga_jual' => 'decimal:2',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime'
     ];
+
+    protected $hidden = [];
 
     protected static function boot()
     {
         parent::boot();
-
+        
         static::creating(function ($product) {
             if (empty($product->uuid)) {
                 $product->uuid = (string) Str::uuid();
@@ -45,34 +52,24 @@ class Product extends Model
         });
     }
 
-    public function user()
+public function user()
     {
-        return $this->belongsTo(User::class, 'user_id', 'user_id')
-            ->select('user_id', 'username', 'email');
+        return $this->belongsTo(User::class, 'user_id', 'user_id');
     }
-
+    
     public function qrLogs()
     {
         return $this->hasMany(ProductQrLog::class, 'product_id', 'product_id')
-            ->select('qr_log_id', 'product_id', 'scanned_by', 'created_at');
+                    ->orderBy('scanned_at', 'desc');
     }
-
+    
     public function stockTransactions()
     {
         return $this->hasMany(StockTransaction::class, 'product_id', 'product_id')
-            ->select('transaction_id', 'product_id', 'jenis_transaksi', 'jumlah', 'catatan', 'penanggung_jawab', 'created_at');
+                    ->orderBy('created_at', 'desc');
     }
 
-    public function getProfitAttribute()
-    {
-        return $this->harga_jual - $this->harga_modal;
-    }
-
-    public function getStatusAttribute()
-    {
-        return $this->stok > 0 ? 'Tersedia' : 'Habis';
-    }
-
+    
     public function scopeTersedia($query)
     {
         return $query->where('stok', '>', 0);
@@ -80,11 +77,38 @@ class Product extends Model
 
     public function scopeHabis($query)
     {
-        return $query->where('stok', '<=', 0);
+        return $query->where('stok', '=', 0);
     }
 
     public function scopeStokMinimal($query)
     {
-        return $query->whereRaw('stok <= stok_minimal');
+        return $query->whereColumn('stok', '<=', 'stok_minimal')
+                     ->where('stok_minimal', '>', 0);
+    }
+    
+    public function getStatusStokAttribute()
+    {
+        if ($this->stok == 0) {
+            return 'Habis';
+        } elseif ($this->stok_minimal && $this->stok <= $this->stok_minimal) {
+            return 'Stok Minimal';
+        }
+        return 'Tersedia';
+    }
+
+    public function getMarginAttribute()
+    {
+        if ($this->harga_modal > 0) {
+            return $this->harga_jual - $this->harga_modal;
+        }
+        return 0;
+    }
+
+    public function getPercentageMarginAttribute()
+    {
+        if ($this->harga_modal > 0) {
+            return (($this->harga_jual - $this->harga_modal) / $this->harga_modal) * 100;
+        }
+        return 0;
     }
 }

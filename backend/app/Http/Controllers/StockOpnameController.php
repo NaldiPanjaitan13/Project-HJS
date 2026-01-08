@@ -9,6 +9,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;  // Add this import
+use Illuminate\Support\Facades\Auth; // Add this import
 
 class StockOpnameController extends Controller
 {
@@ -97,9 +99,11 @@ class StockOpnameController extends Controller
             $stokFisik = $request->stok_fisik;
             $selisih = $stokFisik - $stokSistem;
 
+            $userId = Auth::id(); // Get authenticated user ID
+            
             $opname = StockOpname::create([
                 'product_id' => $request->product_id,
-                'user_id' => $request->user_id ?? null,
+                'user_id' => $userId,
                 'tanggal_opname' => $request->tanggal_opname,
                 'stok_sistem' => $stokSistem,
                 'stok_fisik' => $stokFisik,
@@ -110,15 +114,15 @@ class StockOpnameController extends Controller
             ]);
 
             if ($request->sesuaikan_stok && $selisih != 0) {
-            $jenisTransaksi = $selisih > 0 ? 'IN' : 'OUT';
-            $jumlahAdjust = abs($selisih);
-    
-            StockTransaction::create([
-                'product_id' => $request->product_id,
-                'user_id' => $request->user_id ?? null,
-                'jenis_transaksi' => $jenisTransaksi,  
-                'jumlah' => $jumlahAdjust, 
-                'catatan' => "Stok Opname - {$request->catatan} (Selisih: {$selisih})"
+                $jenisTransaksi = $selisih > 0 ? 'IN' : 'OUT';
+                $jumlahAdjust = abs($selisih);
+        
+                StockTransaction::create([
+                    'product_id' => $request->product_id,
+                    'user_id' => $userId,
+                    'jenis_transaksi' => $jenisTransaksi,  
+                    'jumlah' => $jumlahAdjust, 
+                    'catatan' => "Stok Opname - {$request->catatan} (Selisih: {$selisih})"
                 ]);
             }
 
@@ -133,7 +137,7 @@ class StockOpnameController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error('Stock opname creation failed: ' . $e->getMessage());
+            Log::error('Stock opname creation failed: ' . $e->getMessage()); // Fixed
             
             return response()->json([
                 'success' => false,
@@ -167,7 +171,7 @@ class StockOpnameController extends Controller
             if ($opname->selisih != 0) {
                 StockTransaction::create([
                     'product_id' => $opname->product_id,
-                    'user_id' => auth()->id() ?? null,
+                    'user_id' => Auth::id() ?? null, // Fixed
                     'jenis_transaksi' => 'ADJUST',
                     'jumlah' => $opname->stok_fisik,
                     'catatan' => "Penyesuaian Stok Opname (Selisih: {$opname->selisih})"
@@ -188,7 +192,7 @@ class StockOpnameController extends Controller
 
         } catch (\Exception $e) {
             DB::rollBack();
-            \Log::error('Stock adjustment failed: ' . $e->getMessage());
+            Log::error('Stock adjustment failed: ' . $e->getMessage()); // Fixed
             
             return response()->json([
                 'success' => false,

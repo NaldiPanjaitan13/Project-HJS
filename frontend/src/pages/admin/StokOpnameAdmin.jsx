@@ -160,7 +160,7 @@ const StokOpnameAdmin = () => {
       
       const dataToSubmit = {
         product_id: parseInt(freshProduct.product_id),
-        tanggal_opname: formData.tanggal_opname,
+        tanggal_opname: formData.tanggal_opname, 
         stok_fisik: parseInt(formData.stok_fisik),
         nama_petugas: formData.nama_petugas || null,
         catatan: formData.catatan || null,
