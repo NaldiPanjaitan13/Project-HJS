@@ -14,7 +14,6 @@ const DashboardPageAdmin = () => {
   const [lowStockItems, setLowStockItems] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Filter state
   const [period, setPeriod] = useState('all');
   const [filteredStats, setFilteredStats] = useState({
     totalIn: 0,
@@ -22,43 +21,46 @@ const DashboardPageAdmin = () => {
     transactionsIn: [],
     transactionsOut: []
   });
-
-  // ✅ SINGLE useEffect untuk fetch - hanya dipanggil sekali saat mount
+ 
   useEffect(() => {
     fetchDashboardData();
-  }, []); // Empty dependency array
-
-  // ✅ PARALLEL REQUESTS menggunakan Promise.all
+  }, []);  
+ 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      
-      // ✅ Fetch semua data secara PARALLEL, bukan sequential
+       
+      // Ambil semua produk dengan per_page yang besar
       const [productsResponse, stockSummary, transactionsResponse] = await Promise.all([
-        productapi.getAll(),
+        productapi.getAll({ per_page: 1000 }), // Ambil SEMUA produk
         stockapi.getSummary(),
-        stockapi.getAll({ per_page: 100 })
+        stockapi.getAll({ per_page: 1000 }) // Ambil SEMUA transaksi
       ]);
-
-      // Process products
-      const products = productsResponse.data?.data || [];
+ 
+      const productsData = productsResponse.data || productsResponse;
+      const products = productsData.data || [];
       
-      // Process low stock items
+      // Debug: Lihat berapa produk yang dikembalikan
+      console.log('Total products from API:', productsData.total);
+      console.log('Products array length:', products.length);
+      console.log('Products data:', products);
+      
+      // Gunakan total dari response API atau hitung dari array
+      const totalProducts = productsData.total || products.length;
+       
       const lowStock = products.filter(p => 
         p.stok_minimal && p.stok <= p.stok_minimal
       );
-      
-      // Set stats
+       
       setStats({
-        totalProducts: products.length,
+        totalProducts: totalProducts,
         totalStockIn: stockSummary.data?.total_in || 0,
         totalStockOut: stockSummary.data?.total_out || 0,
         lowStockProducts: lowStock.length
       });
       
       setLowStockItems(lowStock.slice(0, 5));
-      
-      // Set transactions
+       
       const allTransactions = transactionsResponse.data?.data || [];
       setRecentTransactions(allTransactions);
       
@@ -68,8 +70,7 @@ const DashboardPageAdmin = () => {
       setLoading(false);
     }
   };
-
-  // Filter effect - hanya re-calculate ketika period atau transactions berubah
+ 
   useEffect(() => {
     const { start, end } = getDateRange(period);
     
@@ -158,8 +159,7 @@ const DashboardPageAdmin = () => {
       default: return 'Semua Waktu';
     }
   };
-
-  // Calculate percentage for visual bar
+ 
   const maxValue = Math.max(filteredStats.totalIn, filteredStats.totalOut, 1);
   const inPercent = (filteredStats.totalIn / maxValue) * 100;
   const outPercent = (filteredStats.totalOut / maxValue) * 100;
@@ -174,7 +174,6 @@ const DashboardPageAdmin = () => {
 
   return (
     <div className="space-y-6">
-      {/* Welcome Banner */}
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl shadow-lg p-6 text-white">
         <div className="flex items-center justify-between">
           <div>
@@ -185,7 +184,6 @@ const DashboardPageAdmin = () => {
         </div>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Total Produk"
@@ -217,7 +215,6 @@ const DashboardPageAdmin = () => {
         />
       </div>
 
-      {/* Stock Summary dengan Filter */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -241,7 +238,6 @@ const DashboardPageAdmin = () => {
 
         <div className="p-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Barang Masuk Card */}
             <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
@@ -258,7 +254,6 @@ const DashboardPageAdmin = () => {
                   <p className="text-sm text-blue-500">{filteredStats.transactionsIn.length} transaksi</p>
                 </div>
               </div>
-              {/* Progress Bar */}
               <div className="h-3 bg-blue-200 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-blue-500 rounded-full transition-all duration-500"
@@ -267,7 +262,6 @@ const DashboardPageAdmin = () => {
               </div>
             </div>
 
-            {/* Barang Keluar Card */}
             <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-6 border border-red-200">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
@@ -284,7 +278,6 @@ const DashboardPageAdmin = () => {
                   <p className="text-sm text-red-500">{filteredStats.transactionsOut.length} transaksi</p>
                 </div>
               </div>
-              {/* Progress Bar */}
               <div className="h-3 bg-red-200 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-red-500 rounded-full transition-all duration-500"
@@ -294,7 +287,6 @@ const DashboardPageAdmin = () => {
             </div>
           </div>
 
-          {/* Net Stock Change */}
           <div className="mt-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -310,7 +302,6 @@ const DashboardPageAdmin = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Transactions */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-bold text-gray-900">Transaksi Terbaru</h3>
@@ -361,7 +352,6 @@ const DashboardPageAdmin = () => {
           </div>
         </div>
 
-        {/* Low Stock Alert */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
           <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-red-500" />

@@ -11,7 +11,7 @@ import ProductManagementAdmin from '../ProductManagementAdmin';
 import BarangMasukAdmin from '../BarangMasukAdmin';
 import BarangKeluarAdmin from '../BarangKeluarAdmin';
 import StokOpnameAdmin from '../StokOpnameAdmin';
-import LaporanAdmin from '../LaporanAdmin';
+import LaporanOpnameAdmin from '../LaporanOpnameAdmin';
 import KartuStokAdmin from '../KartuStokAdmin';
 
 const DashboardAdmin = () => {
@@ -29,7 +29,7 @@ const DashboardAdmin = () => {
     { id: 'barang-masuk', label: 'Barang Masuk', icon: Archive },
     { id: 'barang-keluar', label: 'Barang Keluar', icon: ClipboardList },
     { id: 'stok-opname', label: 'Stok Opname', icon: Layers },
-    { id: 'laporan', label: 'Laporan', icon: FileBarChart },
+    { id: 'laporan-Opname', label: 'Laporan Opname', icon: FileBarChart },
     { id: 'kartu-stok', label: 'Kartu Stok', icon: FileText },
   ];
   const handleMenuClick = (id) => {
@@ -38,7 +38,6 @@ const DashboardAdmin = () => {
   };
 
   const handleLogoutClick = () => setShowConfirmModal(true);
-
   const handleConfirmLogout = () => {
     setShowConfirmModal(false); 
     localStorage.clear(); 
@@ -53,7 +52,7 @@ const DashboardAdmin = () => {
       'barang-masuk': <BarangMasukAdmin />,
       'barang-keluar': <BarangKeluarAdmin />,
       'stok-opname': <StokOpnameAdmin />,
-      'laporan': <LaporanAdmin />,
+      'laporan-Opname': <LaporanOpnameAdmin />,
       'kartu-stok': <KartuStokAdmin />
     };
     return components[activeMenu] || <DashboardPageAdmin />;
@@ -63,7 +62,6 @@ const DashboardAdmin = () => {
     <div className="flex h-screen bg-gray-100 relative overflow-hidden">
       
       {/* --- MOBILE OVERLAY (Backdrop) --- */}
-      {/* Hanya muncul di mobile saat menu terbuka */}
       {isMobileMenuOpen && (
         <div 
           className="fixed inset-0 z-20 bg-black/50 backdrop-blur-sm md:hidden transition-opacity"

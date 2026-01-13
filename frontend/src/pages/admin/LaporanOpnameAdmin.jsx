@@ -3,7 +3,7 @@ import { Search, Download, Eye, FileText, Printer } from 'lucide-react';
 import { stockopnameapi } from '../../services/stockopnameapi';
 import * as XLSX from 'xlsx';
 
-const LaporanAdmin = () => {
+const LaporanOpnameAdmin = () => {
   const [filteredData, setFilteredData] = useState([]);
   const [filters, setFilters] = useState({
     tanggal_mulai: '',
@@ -583,4 +583,4 @@ const LaporanAdmin = () => {
   );
 };
 
-export default LaporanAdmin;
+export default LaporanOpnameAdmin;
